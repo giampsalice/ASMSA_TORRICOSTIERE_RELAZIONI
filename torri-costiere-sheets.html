@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Torri Costiere — Connessioni Territoriali</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>
+  *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+  :root {
+    --bg:#f5f1ea; --surface:#fff; --text:#1c1a16; --text-muted:#6b6456;
+    --border:#d4ccbc; --accent:#8b5e3c; --accent-light:#f0e4d4;
+    --torre:#c94a2a; --sans:'Georgia',serif;
+    --col-porto:#1a6b9a; --col-salina:#2a8a5a; --col-peschera:#7a4f9e;
+    --col-tonnara:#b8860b; --col-fonte:#888;
+  }
+  html,body { width:100%; height:100%; overflow:hidden;
+    font-family:'Helvetica Neue',Arial,sans-serif; background:var(--bg); color:var(--text); }
+
+  #topbar { height:42px; background:var(--text); color:#f5f1ea;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:0 1.2rem; flex-shrink:0; }
+  #topbar .title { font-family:var(--sans); font-size:13px; letter-spacing:.08em; text-transform:uppercase; }
+  #topbar .sub { font-size:10px; color:#a09882; }
+
+  #shell { display:flex; width:100%; height:calc(100% - 42px); }
+
+  /* sidebar */
+  #sidebar { width:300px; flex-shrink:0; background:var(--surface);
+    border-right:1px solid var(--border); display:flex; flex-direction:column; overflow:hidden; }
+  .s-section { padding:.8rem; border-bottom:1px solid var(--border); flex-shrink:0; }
+  .s-label { font-size:9px; font-weight:700; letter-spacing:.12em; text-transform:uppercase;
+    color:var(--text-muted); margin-bottom:.55rem; }
+
+  .tab-row { display:flex; gap:3px; margin-bottom:.6rem; }
+  .tab { flex:1; padding:4px 2px; font-size:10px; border:1px solid var(--border);
+    border-radius:3px; background:transparent; color:var(--text-muted); cursor:pointer; }
+  .tab.active { background:var(--accent); color:white; border-color:var(--accent); }
+  .tab-panel { display:none; } .tab-panel.visible { display:block; }
+
+  .field { margin-bottom:.45rem; }
+  .field label { font-size:10px; color:var(--text-muted); display:block; margin-bottom:3px; }
+  .field input[type="text"] { width:100%; font-size:11px; padding:5px 7px;
+    border:1px solid var(--border); border-radius:3px; background:#faf9f6; color:var(--text); }
+  .field input[type="text"]:focus { outline:none; border-color:var(--accent); }
+  .field input[type="file"] { font-size:10px; color:var(--text-muted); width:100%; }
+  .hint { font-size:9.5px; color:var(--text-muted); line-height:1.4; margin-bottom:.45rem;
+    padding:4px 7px; background:#faf9f5; border-left:2px solid var(--border); border-radius:2px; }
+
+  .btn-load { width:100%; padding:7px; background:var(--accent); color:white;
+    border:none; border-radius:3px; font-size:11px; cursor:pointer; }
+  .btn-load:hover { background:#7a5030; }
+  .btn-secondary { width:100%; padding:6px; background:transparent; color:var(--accent);
+    border:1px solid var(--accent); border-radius:3px; font-size:11px; cursor:pointer; margin-top:4px; }
+  .btn-secondary:hover { background:var(--accent-light); }
+
+  #status { font-size:10px; color:var(--text-muted); margin-top:.4rem; min-height:14px; }
+  #status.ok { color:#2a8a5a; } #status.error { color:#c94a2a; }
+
+  /* torre groups */
+  #list-head { padding:6px 12px 4px; font-size:9px; font-weight:700;
+    letter-spacing:.12em; text-transform:uppercase; color:var(--text-muted);
+    border-bottom:1px solid var(--border); flex-shrink:0; }
+  #torre-list { flex:1; overflow-y:auto; padding:4px; }
+
+  .group-label { font-size:9px; font-weight:700; letter-spacing:.1em; text-transform:uppercase;
+    color:var(--text-muted); padding:6px 8px 3px; margin-top:4px; }
+  .torre-item { padding:5px 8px; border-radius:4px; cursor:pointer;
+    border:1px solid transparent; margin-bottom:2px; transition:all .12s; }
+  .torre-item:hover  { background:var(--accent-light); border-color:#ddd0c0; }
+  .torre-item.active { background:var(--accent-light); border-color:var(--accent); }
+  .ti-name { font-size:12px; font-weight:500; }
+  .ti-sub  { font-size:10px; color:var(--text-muted); margin-top:1px; }
+  .torre-dot { display:inline-block; width:7px; height:7px; border-radius:50%;
+    background:var(--torre); margin-right:5px; vertical-align:middle; }
+
+  /* detail + fonti tabs */
+  #detail-panel { display:none; border-top:1px solid var(--border);
+    flex-shrink:0; max-height:230px; overflow:hidden; flex-direction:column; }
+  #detail-panel.visible { display:flex; }
+  .detail-tabs { display:flex; border-bottom:1px solid var(--border); flex-shrink:0; }
+  .detail-tab { flex:1; padding:5px; font-size:10px; border:none; background:transparent;
+    color:var(--text-muted); cursor:pointer; border-bottom:2px solid transparent; }
+  .detail-tab.active { color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
+  .detail-pane { display:none; overflow-y:auto; padding:8px 10px; flex:1; }
+  .detail-pane.visible { display:block; }
+  #detail-title { font-size:11px; font-weight:600; margin-bottom:5px; color:var(--text); }
+
+  .conn-item { display:flex; align-items:flex-start; gap:6px;
+    padding:4px 0; border-bottom:1px solid #f0ebe2; font-size:10px; }
+  .conn-item:last-child { border-bottom:none; }
+  .conn-badge { padding:1px 5px; border-radius:3px; font-size:9px; font-weight:600;
+    flex-shrink:0; white-space:nowrap; }
+  .badge-porto    { background:#d4eaf5; color:var(--col-porto); }
+  .badge-salina   { background:#d4f0e4; color:#2a5a3a; }
+  .badge-peschera { background:#ead4f5; color:#5a2a7e; }
+  .badge-torre    { background:#f5d4d0; color:#8a2a1a; }
+  .badge-tonnara  { background:#fdf3d0; color:#8b6200; }
+  .conn-detail { color:var(--text-muted); line-height:1.4; }
+  .cert-alta { color:#2a8a5a; } .cert-media { color:#d4821a; } .cert-bassa { color:#c94a2a; }
+
+  /* fonti panel */
+  .fonte-item { padding:5px 0; border-bottom:1px solid #f0ebe2; font-size:10px; }
+  .fonte-item:last-child { border-bottom:none; }
+  .fonte-tipo { font-size:9px; font-weight:600; padding:1px 5px; border-radius:3px;
+    display:inline-block; margin-bottom:3px; }
+  .ft-portolano     { background:#fdf3d0; color:#8b6200; }
+  .ft-attacco_corsaro { background:#f5d4d0; color:#8a2a1a; }
+  .fonte-title { font-weight:600; color:var(--text); }
+  .fonte-meta  { color:var(--text-muted); line-height:1.5; margin-top:2px; }
+
+  /* map */
+  #map-wrap { flex:1; position:relative; }
+  #map { width:100%; height:100%; }
+  #legend { display:none; position:absolute; bottom:24px; right:8px; background:white;
+    border:1px solid var(--border); border-radius:5px; padding:8px 10px; z-index:1000;
+    font-size:10px; line-height:1.75; box-shadow:0 2px 6px rgba(0,0,0,.1); }
+  .leg-title { font-size:9px; text-transform:uppercase; letter-spacing:.1em;
+    color:var(--text-muted); font-weight:700; margin-bottom:4px; }
+  .leg-row { display:flex; align-items:center; gap:5px; }
+  .leg-dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+  .leg-sq  { width:9px; height:9px; border-radius:2px; flex-shrink:0; }
+  .leg-sep { height:1px; background:var(--border); margin:4px 0; }
+  .leg-tri { width:0; height:0; border-left:5px solid transparent;
+    border-right:5px solid transparent; border-bottom:9px solid var(--col-tonnara); flex-shrink:0; }
+
+  .empty { padding:1.5rem 1rem; text-align:center;
+    color:var(--text-muted); font-size:11px; line-height:1.5; }
+  .empty .ico { font-size:24px; opacity:.35; margin-bottom:6px; }
+
+  /* helper overlay */
+  #sheets-helper { display:none; position:fixed; inset:0;
+    background:rgba(0,0,0,.5); z-index:2000; align-items:center; justify-content:center; }
+  #sheets-helper.open { display:flex; }
+  .helper-box { background:white; border-radius:8px; padding:1.4rem;
+    width:500px; max-width:95vw; max-height:90vh; overflow-y:auto;
+    box-shadow:0 8px 32px rgba(0,0,0,.2); }
+  .helper-box h2 { font-size:14px; color:var(--accent); margin-bottom:.25rem; }
+  .helper-box p  { font-size:11px; color:var(--text-muted); line-height:1.5; margin-bottom:.7rem; }
+  .h-field { margin-bottom:.6rem; }
+  .h-field label { font-size:10px; font-weight:600; color:var(--text-muted);
+    text-transform:uppercase; letter-spacing:.08em; display:block; margin-bottom:3px; }
+  .h-field input { width:100%; font-size:11px; padding:5px 7px;
+    border:1px solid var(--border); border-radius:3px; }
+  .h-field input:focus { outline:none; border-color:var(--accent); }
+  .h-row { display:flex; gap:8px; margin-top:.75rem; }
+  .h-row button { flex:1; padding:7px; border-radius:4px; font-size:11px; cursor:pointer; }
+  .btn-save   { background:var(--accent); color:white; border:none; }
+  .btn-save:hover { background:#7a5030; }
+  .btn-cancel { background:transparent; color:var(--text-muted); border:1px solid var(--border); }
+  .h-note { font-size:9.5px; color:#a09882; margin-top:.5rem; line-height:1.45;
+    padding:5px 7px; background:#faf9f5; border-radius:3px; }
+  code.url-ex { font-size:9px; background:#f5f1ea; padding:3px 6px; border-radius:3px;
+    display:block; margin:.3rem 0; word-break:break-all; }
+
+  /* citation */
+  #citation-box { display:none; margin-top:.5rem; padding:6px 8px;
+    background:#eef6ff; border:1px solid #bdd5ee; border-radius:4px; }
+  #citation-text { font-size:10px; color:#1a4a6a; line-height:1.4; margin-bottom:4px; }
+  .btn-copy-sm { font-size:9px; padding:2px 6px; border:1px solid #bdd5ee;
+    border-radius:2px; background:white; color:#1a6b9a; cursor:pointer; }
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <span class="title">Torri Costiere — Connessioni Territoriali</span>
+  <span class="sub" id="topbar-sub"></span>
+</div>
+
+<div id="shell">
+  <div id="sidebar">
+    <div class="s-section">
+      <div class="s-label">Sorgente dati</div>
+      <div class="tab-row">
+        <button class="tab active" id="tbtn-sheets" onclick="switchTab('sheets')">Google Sheets</button>
+        <button class="tab"        id="tbtn-zenodo" onclick="switchTab('zenodo')">Zenodo</button>
+        <button class="tab"        id="tbtn-local"  onclick="switchTab('local')">Locale</button>
+      </div>
+
+      <div id="tab-sheets" class="tab-panel visible">
+        <div class="hint">Legge le schede <strong>export_*</strong> pubblicate nel tuo Sheets. I dati si aggiornano ad ogni ricarica.</div>
+        <div class="field">
+          <label>ID foglio Google Sheets</label>
+          <input type="text" id="sheets-id" placeholder="1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms">
+        </div>
+        <button class="btn-load" onclick="loadFromSheets()">↓ Carica da Google Sheets</button>
+        <button class="btn-secondary" onclick="openHelper()">⚙ Configurazione schede</button>
+      </div>
+
+      <div id="tab-zenodo" class="tab-panel">
+        <div class="field">
+          <label>DOI Zenodo</label>
+          <input type="text" id="zenodo-doi" placeholder="10.5281/zenodo.XXXXXXX">
+        </div>
+        <button class="btn-load" onclick="loadFromZenodo()">↓ Carica da Zenodo</button>
+        <div id="citation-box">
+          <div id="citation-text"></div>
+          <button class="btn-copy-sm" onclick="copyCitation()">Copia citazione</button>
+        </div>
+      </div>
+
+      <div id="tab-local" class="tab-panel">
+        <div class="field"><label>torri.csv</label><input type="file" id="f-torri" accept=".csv"></div>
+        <div class="field"><label>infrastrutture.csv</label><input type="file" id="f-infr" accept=".csv"></div>
+        <div class="field"><label>connessioni.csv</label><input type="file" id="f-conn" accept=".csv"></div>
+        <div class="field"><label>fonti.csv (opz.)</label><input type="file" id="f-fonti" accept=".csv"></div>
+        <button class="btn-load" onclick="loadFromFiles()">↓ Carica file</button>
+      </div>
+
+      <div id="status"></div>
+    </div>
+
+    <div id="list-head">Torri</div>
+    <div id="torre-list">
+      <div class="empty"><div class="ico">🗼</div>Carica i dati per esplorare le connessioni</div>
+    </div>
+
+    <div id="detail-panel">
+      <div class="detail-tabs">
+        <button class="detail-tab active" onclick="switchDetailTab('conn')">Connessioni</button>
+        <button class="detail-tab"        onclick="switchDetailTab('fonti')">Fonti e attacchi</button>
+      </div>
+      <div id="dpane-conn"  class="detail-pane visible">
+        <div id="detail-title"></div>
+        <div id="detail-connections"></div>
+      </div>
+      <div id="dpane-fonti" class="detail-pane">
+        <div id="detail-fonti"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="map-wrap">
+    <div id="map"></div>
+    <div id="legend">
+      <div class="leg-title">Legenda</div>
+      <div class="leg-row"><div class="leg-dot" style="background:#c94a2a"></div> Torre</div>
+      <div class="leg-row"><div class="leg-sq"  style="background:var(--col-porto)"></div> Porto / scala</div>
+      <div class="leg-row"><div class="leg-sq"  style="background:var(--col-salina)"></div> Salina</div>
+      <div class="leg-row"><div class="leg-sq"  style="background:var(--col-peschera)"></div> Peschiera</div>
+      <div class="leg-row"><div class="leg-tri"></div> Tonnara</div>
+      <div class="leg-sep"></div>
+      <div class="leg-row"><div style="width:16px;height:2px;background:#c94a2a;flex-shrink:0"></div> Visiva+funz.</div>
+      <div class="leg-row"><div style="width:16px;height:0;border-top:2px dashed #d4821a;flex-shrink:0"></div> Visiva</div>
+    </div>
+  </div>
+</div>
+
+<!-- HELPER OVERLAY -->
+<div id="sheets-helper">
+  <div class="helper-box">
+    <h2>Configurare Google Sheets</h2>
+    <p>Incolla l'ID del tuo foglio e verifica i nomi delle schede export.</p>
+
+    <div class="h-field">
+      <label>ID foglio (dalla URL)</label>
+      <code class="url-ex">docs.google.com/spreadsheets/d/<strong style="color:#c94a2a">← questo →</strong>/edit</code>
+      <input type="text" id="h-id" placeholder="1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms">
+    </div>
+    <div class="h-field">
+      <label>Scheda torri</label>
+      <input type="text" id="h-torri" value="export_torri">
+    </div>
+    <div class="h-field">
+      <label>Scheda infrastrutture</label>
+      <input type="text" id="h-infr" value="export_infrastrutture">
+    </div>
+    <div class="h-field">
+      <label>Scheda connessioni</label>
+      <input type="text" id="h-conn" value="export_connessioni">
+    </div>
+    <div class="h-field">
+      <label>Scheda fonti (portolani + corsari) — opzionale</label>
+      <input type="text" id="h-fonti" value="export_fonti">
+    </div>
+    <div class="h-note">
+      Assicurati che ogni scheda export sia <strong>pubblicata come CSV</strong>:<br>
+      File → Condividi → Pubblica sul web → seleziona la scheda → CSV → Pubblica.
+    </div>
+    <div class="h-row">
+      <button class="btn-cancel" onclick="closeHelper()">Annulla</button>
+      <button class="btn-save"   onclick="saveHelper()">Salva e carica</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script>
+'use strict';
+
+/* ── state ── */
+let torri=[], infrastrutture=[], connessioni=[], fonti=[];
+let activeTorre=null;
+let layerTorri, layerInfr, layerLines;
+let currentCitation='';
+let cfg = {
+  id:'',
+  sheetTorri:'export_torri',
+  sheetInfr:'export_infrastrutture',
+  sheetConn:'export_connessioni',
+  sheetFonti:'export_fonti'
+};
+
+/* ── map init ── */
+const map = L.map('map').setView([39.5, 9.0], 7);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+  {attribution:'© OpenStreetMap · CartoDB', subdomains:'abcd', maxZoom:19}).addTo(map);
+layerTorri = L.layerGroup().addTo(map);
+layerInfr  = L.layerGroup().addTo(map);
+layerLines = L.layerGroup().addTo(map);
+
+/* ── tab switches ── */
+function switchTab(n) {
+  ['sheets','zenodo','local'].forEach(t => {
+    document.getElementById('tab-'+t).classList.toggle('visible', t===n);
+    document.getElementById('tbtn-'+t).classList.toggle('active',  t===n);
+  });
+}
+function switchDetailTab(n) {
+  document.querySelectorAll('.detail-tab').forEach((b,i)=>
+    b.classList.toggle('active', ['conn','fonti'][i]===n));
+  document.getElementById('dpane-conn').classList.toggle('visible',  n==='conn');
+  document.getElementById('dpane-fonti').classList.toggle('visible', n==='fonti');
+}
+
+/* ── utilities ── */
+const parseCSV = t => Papa.parse(t.trim(),{header:true,skipEmptyLines:true}).data;
+function setStatus(msg,type){
+  const el=document.getElementById('status');
+  el.textContent=msg; el.className=type||'';
+}
+function sheetsURL(sheet){
+  return `https://docs.google.com/spreadsheets/d/${cfg.id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheet)}`;
+}
+
+/* ── Google Sheets loader ── */
+async function loadFromSheets(){
+  const id=document.getElementById('sheets-id').value.trim();
+  if(!id){setStatus('Inserisci l\'ID del foglio','error');return;}
+  cfg.id=id; setStatus('Connessione a Google Sheets…');
+  try {
+    // required sheets
+    const [t,i,c] = await Promise.all([
+      fetch(sheetsURL(cfg.sheetTorri)).then(r=>{if(!r.ok)throw new Error(`Scheda "${cfg.sheetTorri}" non pubblicata`);return r.text();}),
+      fetch(sheetsURL(cfg.sheetInfr)).then(r=>{if(!r.ok)throw new Error(`Scheda "${cfg.sheetInfr}" non pubblicata`);return r.text();}),
+      fetch(sheetsURL(cfg.sheetConn)).then(r=>{if(!r.ok)throw new Error(`Scheda "${cfg.sheetConn}" non pubblicata`);return r.text();}),
+    ]);
+    torri=parseCSV(t); infrastrutture=parseCSV(i); connessioni=parseCSV(c);
+
+    // optional: fonti (portolani + corsari)
+    try {
+      const f=await fetch(sheetsURL(cfg.sheetFonti)).then(r=>r.ok?r.text():null);
+      fonti = f ? parseCSV(f) : [];
+    } catch(_){ fonti=[]; }
+
+    render();
+    const now=new Date().toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});
+    document.getElementById('topbar-sub').textContent=`Google Sheets · ${torri.length} torri · aggiornato ${now}`;
+    setStatus(`✓ ${torri.length} torri · ${infrastrutture.length} infr. · ${connessioni.length} conn.${fonti.length?` · ${fonti.length} fonti`:''}`, 'ok');
+  } catch(e){ setStatus('Errore: '+e.message,'error'); }
+}
+
+/* ── helper ── */
+function openHelper(){
+  document.getElementById('h-id').value    = cfg.id;
+  document.getElementById('h-torri').value = cfg.sheetTorri;
+  document.getElementById('h-infr').value  = cfg.sheetInfr;
+  document.getElementById('h-conn').value  = cfg.sheetConn;
+  document.getElementById('h-fonti').value = cfg.sheetFonti;
+  document.getElementById('sheets-helper').classList.add('open');
+}
+function closeHelper(){ document.getElementById('sheets-helper').classList.remove('open'); }
+function saveHelper(){
+  cfg.id         = document.getElementById('h-id').value.trim();
+  cfg.sheetTorri = document.getElementById('h-torri').value.trim();
+  cfg.sheetInfr  = document.getElementById('h-infr').value.trim();
+  cfg.sheetConn  = document.getElementById('h-conn').value.trim();
+  cfg.sheetFonti = document.getElementById('h-fonti').value.trim();
+  document.getElementById('sheets-id').value = cfg.id;
+  closeHelper(); if(cfg.id) loadFromSheets();
+}
+document.getElementById('sheets-helper').addEventListener('click',e=>{if(e.target===e.currentTarget)closeHelper();});
+
+/* ── Zenodo loader ── */
+async function loadFromZenodo(){
+  const raw=document.getElementById('zenodo-doi').value.trim();
+  if(!raw){setStatus('Inserisci DOI','error');return;}
+  const clean=raw.replace(/^https?:\/\/(doi\.org|zenodo\.org\/records?\/)/,'');
+  const m=clean.match(/zenodo\.(\d+)/i);
+  if(!m){setStatus('Formato DOI non riconosciuto','error');return;}
+  setStatus('Contatto Zenodo…');
+  try{
+    const meta=await fetch(`https://zenodo.org/api/records/${m[1]}`).then(r=>{
+      if(!r.ok)throw new Error('Record non trovato');return r.json();
+    });
+    const authors=(meta.metadata.creators||[]).map(c=>c.name).join(', ');
+    const year=(meta.metadata.publication_date||'').slice(0,4);
+    currentCitation=`${authors} (${year}). ${meta.metadata.title}. Zenodo. https://doi.org/${clean}`;
+    document.getElementById('citation-text').textContent=currentCitation;
+    document.getElementById('citation-box').style.display='block';
+    const files=meta.files||[];
+    const find=n=>files.find(f=>f.key&&f.key.toLowerCase().endsWith(n));
+    const fT=find('torri.csv'),fI=find('infrastrutture.csv'),fC=find('connessioni.csv');
+    if(!fT||!fI||!fC){setStatus('CSV non trovati nel record','error');return;}
+    const [t,i,c]=await Promise.all([fetch(fT.links.self).then(r=>r.text()),fetch(fI.links.self).then(r=>r.text()),fetch(fC.links.self).then(r=>r.text())]);
+    torri=parseCSV(t);infrastrutture=parseCSV(i);connessioni=parseCSV(c);fonti=[];
+    render();
+    setStatus(`✓ ${torri.length} torri · ${infrastrutture.length} infr. · ${connessioni.length} conn.`,'ok');
+  }catch(e){setStatus('Errore: '+e.message,'error');}
+}
+function copyCitation(){
+  navigator.clipboard.writeText(currentCitation).then(()=>{
+    const b=document.querySelector('.btn-copy-sm'),o=b.textContent;
+    b.textContent='✓ Copiata';setTimeout(()=>b.textContent=o,1800);
+  });
+}
+
+/* ── local files ── */
+const readFile=inp=>new Promise((res,rej)=>{
+  if(!inp.files[0]){res(null);return;}
+  const r=new FileReader();r.onload=e=>res(e.target.result);r.onerror=rej;r.readAsText(inp.files[0]);
+});
+async function loadFromFiles(){
+  const [t,i,c,f]=await Promise.all([
+    readFile(document.getElementById('f-torri')),
+    readFile(document.getElementById('f-infr')),
+    readFile(document.getElementById('f-conn')),
+    readFile(document.getElementById('f-fonti')),
+  ]);
+  if(!t||!i||!c){setStatus('Seleziona almeno i 3 CSV principali','error');return;}
+  torri=parseCSV(t);infrastrutture=parseCSV(i);connessioni=parseCSV(c);fonti=f?parseCSV(f):[];
+  render();
+  setStatus(`✓ ${torri.length} torri · ${infrastrutture.length} infr. · ${connessioni.length} conn.`,'ok');
+}
+
+/* ── icons ── */
+const makeTorreIcon=active=>L.divIcon({
+  html:`<div style="width:13px;height:13px;background:${active?'#8b1a00':'#c94a2a'};border:2px solid ${active?'#fff':'rgba(255,255,255,.8)'};border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,.4)"></div>`,
+  className:'',iconSize:[13,13],iconAnchor:[6,6]
+});
+
+const INFR_COLORS = {
+  porto:'#1a6b9a', salina:'#2a8a5a', peschera:'#7a4f9e', tonnara:'#b8860b'
+};
+function makeInfrIcon(tipo){
+  const col=INFR_COLORS[tipo]||'#888';
+  if(tipo==='tonnara'){
+    return L.divIcon({
+      html:`<div style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:11px solid ${col};filter:drop-shadow(0 1px 2px rgba(0,0,0,.3))"></div>`,
+      className:'',iconSize:[12,11],iconAnchor:[6,11]
+    });
+  }
+  return L.divIcon({
+    html:`<div style="width:10px;height:10px;background:${col};border:2px solid rgba(255,255,255,.9);border-radius:2px;box-shadow:0 1px 3px rgba(0,0,0,.3)"></div>`,
+    className:'',iconSize:[10,10],iconAnchor:[5,5]
+  });
+}
+
+/* ── haversine ── */
+function hav(la1,lo1,la2,lo2){
+  const R=6371,dLa=(la2-la1)*Math.PI/180,dLo=(lo2-lo1)*Math.PI/180;
+  const a=Math.sin(dLa/2)**2+Math.cos(la1*Math.PI/180)*Math.cos(la2*Math.PI/180)*Math.sin(dLo/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+
+/* ── render all markers ── */
+function render(){
+  layerTorri.clearLayers();layerInfr.clearLayers();layerLines.clearLayers();
+  activeTorre=null;
+  const list=document.getElementById('torre-list');
+  list.innerHTML='';
+  const bounds=[];
+
+  // group torri by prefix
+  const groups = {srd:[], cat:[], crs:[], other:[]};
+  torri.forEach(t=>{
+    const id=t.id||'';
+    if(id.startsWith('TS'))      groups.srd.push(t);
+    else if(id.startsWith('TC')&&!id.startsWith('TCR')) groups.cat.push(t);
+    else if(id.startsWith('TCR')) groups.crs.push(t);
+    else                          groups.other.push(t);
+  });
+
+  const groupLabels={srd:'Sardegna',cat:'Corona d\'Aragona',crs:'Corsica',other:'Altre'};
+  Object.entries(groups).forEach(([gk,gtorri])=>{
+    if(!gtorri.length)return;
+    const gl=document.createElement('div');
+    gl.className='group-label';
+    gl.textContent=groupLabels[gk];
+    list.appendChild(gl);
+
+    gtorri.forEach(t=>{
+      if(!t.lat||!t.lon)return;
+      const la=parseFloat(t.lat),lo=parseFloat(t.lon);
+      if(isNaN(la)||isNaN(lo))return;
+      bounds.push([la,lo]);
+      const mk=L.marker([la,lo],{icon:makeTorreIcon(false)}).addTo(layerTorri);
+      const nome=t.nome||'?';
+      mk.bindTooltip(`<strong>${nome}</strong><br><small>${t.localita||''} — ${t.periodo||''}</small>`,{direction:'top',offset:[0,-8]});
+      mk.on('click',()=>selectTorre(t));
+      const el=document.createElement('div');
+      el.className='torre-item';el.id='li-'+(t.id||nome).replace(/\s/g,'_');
+      el.innerHTML=`<div class="ti-name"><span class="torre-dot"></span>${nome}</div><div class="ti-sub">${t.localita||''} · ${t.periodo||''}</div>`;
+      el.onclick=()=>selectTorre(t);
+      list.appendChild(el);
+      t._mk=mk;
+    });
+  });
+
+  infrastrutture.forEach(i=>{
+    if(!i.lat||!i.lon)return;
+    const la=parseFloat(i.lat),lo=parseFloat(i.lon);
+    if(isNaN(la)||isNaN(lo))return;
+    bounds.push([la,lo]);
+    const mk=L.marker([la,lo],{icon:makeInfrIcon(i.tipo)}).addTo(layerInfr);
+    mk.bindTooltip(`<strong>${i.nome||'?'}</strong><br><small>${i.tipo||''} — ${i.localita||''}</small>`,{direction:'top',offset:[0,-8]});
+    i._mk=mk;
+  });
+
+  if(bounds.length) map.fitBounds(bounds,{padding:[30,30]});
+  document.getElementById('legend').style.display='block';
+}
+
+/* ── select torre ── */
+function selectTorre(torre){
+  if(activeTorre){
+    const p=torri.find(t=>t.id===activeTorre.id);
+    if(p&&p._mk)p._mk.setIcon(makeTorreIcon(false));
+    document.querySelectorAll('.torre-item').forEach(e=>e.classList.remove('active'));
+  }
+  activeTorre=torre;
+  if(torre._mk)torre._mk.setIcon(makeTorreIcon(true));
+  const liId='li-'+(torre.id||(torre.nome||'').replace(/\s/g,'_'));
+  const li=document.getElementById(liId);
+  if(li){li.classList.add('active');li.scrollIntoView({block:'nearest'});}
+
+  layerLines.clearLayers();layerInfr.clearLayers();
+
+  infrastrutture.forEach(i=>{
+    if(!i.lat||!i.lon)return;
+    const mk=L.marker([parseFloat(i.lat),parseFloat(i.lon)],{icon:makeInfrIcon(i.tipo),opacity:0.18}).addTo(layerInfr);
+    mk.bindTooltip(`<strong>${i.nome||'?'}</strong><br><small>${i.tipo||''} — ${i.localita||''}</small>`,{direction:'top',offset:[0,-8]});
+    i._mk=mk;
+  });
+
+  const tKey=torre.id||torre.nome||'';
+  const conns=connessioni.filter(c=>c.id_torre===tKey);
+  const linked=new Set();
+
+  conns.forEach(c=>{
+    const tgt=infrastrutture.find(i=>i.id===c.id_infrastruttura||i.nome===c.id_infrastruttura)
+           ||torri.find(t=>t.id===c.id_infrastruttura||t.nome===c.id_infrastruttura);
+    if(!tgt||!tgt.lat)return;
+    linked.add(c.id_infrastruttura);
+    const la1=parseFloat(torre.lat),lo1=parseFloat(torre.lon);
+    const la2=parseFloat(tgt.lat), lo2=parseFloat(tgt.lon);
+    const dashed=c.tipo_relazione==='visiva'||c.certezza==='media'||c.certezza==='bassa';
+    L.polyline([[la1,lo1],[la2,lo2]],{
+      color:c.tipo_relazione==='visiva+funzionale'?'#c94a2a':'#d4821a',
+      weight:c.certezza==='alta'?2.5:1.5,
+      opacity:c.certezza==='alta'?0.85:c.certezza==='media'?0.55:0.3,
+      dashArray:dashed?'6,4':null
+    }).addTo(layerLines);
+    const dist=hav(la1,lo1,la2,lo2).toFixed(2);
+    L.tooltip({permanent:true,direction:'center'})
+      .setContent(`<span style="font-size:9px;background:white;padding:1px 4px;border-radius:2px;color:#444;white-space:nowrap;box-shadow:0 1px 2px rgba(0,0,0,.1)">↔ ${dist} km</span>`)
+      .setLatLng([(la1+la2)/2,(lo1+lo2)/2]).addTo(layerLines);
+    if(tgt._mk)tgt._mk.setOpacity(1);
+  });
+
+  layerInfr.eachLayer(l=>{
+    const i=infrastrutture.find(x=>x._mk===l);
+    if(i&&linked.has(i.id||i.nome))l.setOpacity(1);
+  });
+
+  showDetail(torre,conns);
+  map.setView([parseFloat(torre.lat),parseFloat(torre.lon)],12,{animate:true});
+}
+
+/* ── detail panel ── */
+function showDetail(torre,conns){
+  const panel=document.getElementById('detail-panel');
+  panel.classList.add('visible');
+
+  // tab connessioni
+  const nome=torre.nome||'?';
+  const titleEl=document.getElementById('detail-title');
+  titleEl.innerHTML='';
+  const titleText=document.createElement('span');
+  titleText.textContent=nome+(torre.note_ricerca?' — '+torre.note_ricerca:'');
+  titleEl.appendChild(titleText);
+  // scheda ASMSa button
+  const asmsa=torre['scheda_ASMSa']||torre.scheda_ASMSa||'';
+  const existingBtn=document.getElementById('asmsa-btn');
+  if(existingBtn) existingBtn.remove();
+  if(asmsa&&asmsa.startsWith('http')){
+    const btn=document.createElement('a');
+    btn.id='asmsa-btn';
+    btn.href=asmsa; btn.target='_blank';
+    btn.textContent='→ Apri scheda ASMSa';
+    btn.style.cssText='display:block;margin-top:5px;font-size:10px;color:#1a6b9a;background:#eef6ff;border:1px solid #bdd5ee;border-radius:3px;padding:3px 8px;text-decoration:none;width:fit-content;';
+    titleEl.appendChild(btn);
+  }
+  const cd=document.getElementById('detail-connections');
+  cd.innerHTML='';
+  if(!conns.length){
+    cd.innerHTML='<div style="font-size:10px;color:#aaa;padding:4px 0">Nessuna connessione registrata.</div>';
+  } else {
+    conns.forEach(c=>{
+      const tgt=infrastrutture.find(i=>i.id===c.id_infrastruttura||i.nome===c.id_infrastruttura)
+             ||torri.find(t=>t.id===c.id_infrastruttura||t.nome===c.id_infrastruttura);
+      const tipo=tgt?(tgt.tipo||'torre'):'?';
+      const tn=tgt?(tgt.nome||'?'):c.id_infrastruttura;
+      let distStr='—';
+      if(tgt&&tgt.lat&&tgt.lon){
+        const dc=hav(parseFloat(torre.lat),parseFloat(torre.lon),parseFloat(tgt.lat),parseFloat(tgt.lon));
+        distStr=dc.toFixed(2)+' km';
+        if(c.distanza_km&&Math.abs(dc-parseFloat(c.distanza_km))>0.15)
+          distStr+=` <span style="color:#ccc;font-size:9px">(CSV:${c.distanza_km})</span>`;
+      }
+      const d=document.createElement('div');d.className='conn-item';
+      d.innerHTML=`<span class="conn-badge badge-${tipo}">${tipo}</span>
+        <div class="conn-detail"><strong>${tn}</strong> · ↔ ${distStr} · <span class="cert-${c.certezza||'bassa'}">${c.certezza||''}</span> · ${c.tipo_relazione||''}
+        ${c.fonti?`<br><em style="color:#bbb">${c.fonti}</em>`:''}${c.note?`<br>${c.note}`:''}</div>`;
+      cd.appendChild(d);
+    });
+  }
+
+  // tab fonti
+  const fd=document.getElementById('detail-fonti');
+  fd.innerHTML='';
+  const tKey=torre.id||torre.nome||'';
+  const loc=torre.localita||'';
+
+  // cerca fonti per questa torre: match su localita o su riferimento esplicito
+  const fTorre=fonti.filter(f=>{
+    const fl=(f.localita||f['oc:location']||'').toLowerCase();
+    const ft=(f.titolo||f['dcterms:title']||'').toLowerCase();
+    const fd2=(f.descrizione||f['dcterms:description']||'').toLowerCase();
+    const l=loc.toLowerCase();
+    const n=(torre.nome||'').toLowerCase();
+    return (l&&fl.includes(l))||(n&&(ft.includes(n)||fd2.includes(n)))||f.id_torre===tKey;
+  });
+
+  if(!fTorre.length){
+    fd.innerHTML='<div style="font-size:10px;color:#aaa;padding:4px 0">Nessuna fonte o attacco associato.</div>';
+  } else {
+    fTorre.forEach(f=>{
+      const tipo=f.tipo||'fonte';
+      const titolo=f.titolo||f['dcterms:title']||'—';
+      const data=f.data||f['dcterms:date']||'';
+      const autore=f.autore||'';
+      const desc=f.descrizione||f['dcterms:description']||'';
+      const cit=f.citazione||f['dcterms:bibliographicCitation']||'';
+      const url=f.url||f['schema.org:contentUrl']||'';
+      const el=document.createElement('div');el.className='fonte-item';
+      el.innerHTML=`<span class="fonte-tipo ft-${tipo}">${tipo.replace('_',' ')}</span>
+        <div class="fonte-title">${titolo}</div>
+        <div class="fonte-meta">${[data,autore].filter(Boolean).join(' · ')}
+        ${desc?`<br>${desc}`:''}
+        ${cit?`<br><em style="color:#bbb">${cit}</em>`:''}
+        ${url?`<br><a href="${url}" target="_blank" style="color:#1a6b9a;font-size:9px">→ fonte</a>`:''}</div>`;
+      fd.appendChild(el);
+    });
+  }
+
+  // auto-switch al tab connessioni
+  switchDetailTab('conn');
+}
+
+// URL params pre-config
+const p=new URLSearchParams(window.location.search);
+if(p.get('sheets_id')){
+  cfg.id=p.get('sheets_id');
+  if(p.get('sheet_torri'))  cfg.sheetTorri=p.get('sheet_torri');
+  if(p.get('sheet_infr'))   cfg.sheetInfr =p.get('sheet_infr');
+  if(p.get('sheet_conn'))   cfg.sheetConn =p.get('sheet_conn');
+  if(p.get('sheet_fonti'))  cfg.sheetFonti=p.get('sheet_fonti');
+  document.getElementById('sheets-id').value=cfg.id;
+  loadFromSheets();
+}
+</script>
+</body>
+</html>
