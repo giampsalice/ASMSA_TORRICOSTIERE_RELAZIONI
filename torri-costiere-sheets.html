@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Torri Costiere — Connessioni Territoriali v4</title>
+<title>Torri Costiere — Connessioni Territoriali v17</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <style>
   *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
@@ -101,6 +101,7 @@
   .badge-peschera { background:#ead4f5; color:#5a2a7e; }
   .badge-torre    { background:#f5d4d0; color:#8a2a1a; }
   .badge-tonnara  { background:#fdf3d0; color:#8b6200; }
+  .badge-corallo  { background:#ffe2dc; color:#a63d2f; }
   .conn-detail { color:var(--text-muted); line-height:1.4; }
   .cert-alta { color:#2a8a5a; } .cert-media { color:#d4821a; } .cert-bassa { color:#c94a2a; }
 
@@ -124,10 +125,21 @@
     color:var(--text-muted); font-weight:700; margin-bottom:4px; }
   .leg-row { display:flex; align-items:center; gap:5px; }
   .leg-dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
-  .leg-sq  { width:9px; height:9px; border-radius:2px; flex-shrink:0; }
+  .leg-sq  { width:14px; height:14px; border-radius:3px; flex-shrink:0; border:2px solid #fff; outline:1px solid rgba(28,26,22,.55); box-shadow:0 1px 3px rgba(0,0,0,.3); }
   .leg-sep { height:1px; background:var(--border); margin:4px 0; }
-  .leg-tri { width:0; height:0; border-left:5px solid transparent;
-    border-right:5px solid transparent; border-bottom:9px solid var(--col-tonnara); flex-shrink:0; }
+  .leg-tri { width:17px; height:17px; background:var(--col-tonnara); flex-shrink:0;
+    clip-path:polygon(50% 0,100% 100%,0 100%); filter:drop-shadow(0 1px 2px rgba(0,0,0,.45)); }
+  .leg-icon { width:20px; height:20px; flex-shrink:0; display:inline-flex; align-items:center; justify-content:center; }
+  .leg-icon svg { width:20px; height:20px; overflow:visible; }
+  .infr-marker, .tower-symbol { transition:transform .12s ease, filter .12s ease; transform-origin:center; }
+  .leaflet-marker-icon:hover .infr-marker, .leaflet-marker-icon:hover .tower-symbol { transform:scale(1.16); filter:drop-shadow(0 3px 6px rgba(0,0,0,.68)); }
+
+  .leaflet-tooltip.distance-tooltip {
+    background:#fff; color:#29251f; border:1px solid #bfb5a5;
+    border-radius:4px; box-shadow:0 2px 8px rgba(0,0,0,.18);
+    padding:5px 7px; font-size:10px; line-height:1.35;
+  }
+  .leaflet-tooltip.distance-tooltip::before { border-top-color:#bfb5a5; }
 
   .empty { padding:1.5rem 1rem; text-align:center;
     color:var(--text-muted); font-size:11px; line-height:1.5; }
@@ -169,7 +181,7 @@
 <body>
 
 <div id="topbar">
-  <span class="title">Torri Costiere — Connessioni Territoriali <small style="opacity:.55">v6</small></span>
+  <span class="title">Torri Costiere — Connessioni Territoriali <small style="opacity:.55">v17</small></span>
   <span class="sub" id="topbar-sub"></span>
 </div>
 
@@ -240,16 +252,17 @@
     <div id="map"></div>
     <div id="legend">
       <div class="leg-title">Legenda</div>
-      <div class="leg-row"><div class="leg-dot" style="background:#c94a2a"></div> Torre</div>
-      <div class="leg-row"><div class="leg-sq"  style="background:var(--col-porto)"></div> Porto / scala</div>
-      <div class="leg-row"><div class="leg-sq"  style="background:var(--col-salina)"></div> Salina</div>
-      <div class="leg-row"><div class="leg-sq"  style="background:var(--col-peschera)"></div> Peschiera</div>
-      <div class="leg-row"><div class="leg-tri"></div> Tonnara</div>
-      <div class="leg-row"><div class="leg-sq" style="background:#888;transform:rotate(45deg);margin:0 2px"></div> Altra infrastruttura</div>
+      <div id="tower-type-legend"></div>
+      <div class="leg-row"><span class="leg-icon">⚓</span> Porto / scalo</div>
+      <div class="leg-row"><span class="leg-icon"><svg viewBox="0 0 32 32"><path d="M5 24Q10 19 13 15Q16 10 19 15Q22 19 27 24Z" fill="#f7fbff" stroke="#2a8a5a" stroke-width="2.4"/><path d="M7 24h18" stroke="#2a8a5a" stroke-width="2.4"/></svg></span> Salina</div>
+      <div class="leg-row"><span class="leg-icon"><svg viewBox="0 0 32 32"><ellipse cx="17" cy="14" rx="7" ry="4" fill="#7a4f9e"/><path d="M10 14 6 10.5v7Z" fill="#7a4f9e"/><path d="M5 23c3-2 6-2 9 0s6 2 9 0 5-2 8 0" fill="none" stroke="#6ea8c7" stroke-width="2"/></svg></span> Peschiera</div>
+      <div class="leg-row"><span class="leg-icon">🐟</span> Tonnara</div>
+      <div class="leg-row"><span class="leg-icon">🪸</span> Corallo</div>
+      <div class="leg-row"><div class="leg-sq" style="background:#888;transform:rotate(45deg);margin:0 3px"></div> ID senza prefisso riconosciuto</div>
       <div class="leg-sep"></div>
-      <div class="leg-row"><div style="width:16px;height:2px;background:#c94a2a;flex-shrink:0"></div> Visiva+funz.</div>
-      <div class="leg-row"><div style="width:16px;height:0;border-top:2px dashed #d4821a;flex-shrink:0"></div> Visiva</div>
-      <div class="leg-row"><div style="width:16px;height:0;border-top:2px dotted #777;flex-shrink:0"></div> Prossimità calcolata</div>
+      <div class="leg-row"><div style="width:18px;height:3px;background:#1769aa;flex-shrink:0"></div> 3 torri più vicine</div>
+      <div class="leg-row"><div style="width:18px;height:0;border-top:3px dashed #d4821a;flex-shrink:0"></div> Infrastruttura visibile</div>
+      <div style="font-size:9px;color:#888;margin-top:4px;line-height:1.3">Passa il mouse sulle linee per vedere la distanza.</div>
     </div>
   </div>
 </div>
@@ -691,42 +704,67 @@ function getCoordinates(row,entityType='altro',id=''){
   };
 }
 
-function canonicalInfrastructureType(value){
-  const tipo=normalizeKey(value);
-  if(!tipo) return 'altro';
-  if(/tonnar|almadrab|madrague|tuna_fish|pesca_del_tonno/.test(tipo)) return 'tonnara';
-  if(/peschier|pescher|piscicol|piscifact|fish_pond|fishery|vivai.*ittic|ittic/.test(tipo)) return 'peschera';
-  if(/salin|salines|saltwork|salt_pond|marais_salant/.test(tipo)) return 'salina';
-  if(/porto|porti|puerto|portu|harbou?r|approd|embarcader|scal[ae]|molo|darsen|rada|ancoragg|marina/.test(tipo)) return 'porto';
-  if(/faro|fari|far[oi]|lighthouse|phare|segnalament.*marittim/.test(tipo)) return 'faro';
-  if(/fortific|fortress|fortez|castell|castle|bastion|cittadell|muraglia/.test(tipo)) return 'fortificazione';
-  if(/centro_abitato|abitato|villaggi|borgo|citta|città|town|village|settlement/.test(tipo)) return 'centro_abitato';
-  return 'altro';
+const INFRASTRUCTURE_PREFIX_TYPES = {
+  prt:  'porto',
+  psch: 'peschera',
+  sal:  'salina',
+  tonn: 'tonnara',
+  crl:  'corallo'
+};
+
+const INFRASTRUCTURE_TYPE_LABELS = {
+  porto:'Porto / scalo',
+  peschera:'Peschiera',
+  salina:'Salina',
+  tonnara:'Tonnara',
+  corallo:'Corallo',
+  altro:'Altra infrastruttura'
+};
+
+/*
+ * La tipologia dell'infrastruttura dipende esclusivamente dal prefisso ID:
+ * prt_ = porto; psch_ = peschiera; sal_ = salina;
+ * tonn_ = tonnara; crl_ = corallo.
+ */
+function infrastructureTypeFromId(value){
+  let id=String(value ?? '').replace(/^\uFEFF/,'').trim().toLowerCase();
+  if(!id) return 'altro';
+  try {
+    if(/^https?:\/\//i.test(id)){
+      const u=new URL(id);
+      id=decodeURIComponent((u.hash||u.pathname).replace(/^#|\/$/g,'').split('/').pop()||id);
+    }
+  } catch(_) {}
+  id=id
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/[\s.-]+/g,'_')
+    .replace(/[^a-z0-9_]/g,'_')
+    .replace(/_+/g,'_')
+    .replace(/^_+|_+$/g,'');
+  const match=id.match(/^(prt|psch|sal|tonn|crl)(?:_|$)/);
+  return match ? INFRASTRUCTURE_PREFIX_TYPES[match[1]] : 'altro';
 }
 
-function inferInfrastructureType(row,rawTipo){
-  const candidates=[];
-  if(rawTipo) candidates.push(rawTipo);
+function canonicalInfrastructureType(value){
+  const key=normalizeKey(value);
+  if(Object.values(INFRASTRUCTURE_PREFIX_TYPES).includes(key) || key==='altro') return key;
+  return infrastructureTypeFromId(value);
+}
 
-  // Prima i campi esplicitamente tipologici.
-  for(const [key,value] of Object.entries(row||{})){
-    const k=normalizeKey(key);
-    if(/tipo|tipologia|type|categoria|category|classe|class|funzione|function|additional_type|p2_has_type/.test(k)){
-      candidates.push(value);
-    }
+function inferInfrastructureType(row,id=''){
+  return infrastructureTypeFromId(id || findEntityIdentifier(row,'infrastruttura',0));
+}
+
+function resolveInfrastructureType(itemOrType){
+  if(itemOrType && typeof itemOrType==='object'){
+    return infrastructureTypeFromId(itemOrType.id || findEntityIdentifier(itemOrType,'infrastruttura',0));
   }
+  return canonicalInfrastructureType(itemOrType);
+}
 
-  // Poi denominazione e identificativo: spesso contengono “Tonnara”, “Salina”, “Porto”…
-  candidates.push(
-    getField(row,['nome','denominazione','titolo','title','rdfs:label','skos:prefLabel','dcterms:title']),
-    getField(row,['codice_infrastruttura','id_infrastruttura','infrastruttura_id','codice','identifier','id'])
-  );
-
-  for(const value of candidates){
-    const canonical=canonicalInfrastructureType(value);
-    if(canonical!=='altro') return canonical;
-  }
-  return 'altro';
+function infrastructureTypeLabel(itemOrType){
+  const canonical=resolveInfrastructureType(itemOrType);
+  return INFRASTRUCTURE_TYPE_LABELS[canonical] || INFRASTRUCTURE_TYPE_LABELS.altro;
 }
 
 function normalizeGeographicRows(rows,entityType){
@@ -736,8 +774,15 @@ function normalizeGeographicRows(rows,entityType){
     const nome=findEntityName(row,entityType,id);
     const localita=String(getField(row,['localita','località','luogo','comune','oc:location']) || '').trim();
     const periodo=String(getField(row,['periodo','datazione','epoca','cronologia']) || '').trim();
-    const rawTipo=getField(row,['tipo','tipologia','categoria','tipo_infrastruttura','classe','sottotipo','funzione','dcterms:type','dc:type','rdf:type','schema:additionalType','schema.org:additionalType','crm:P2_has_type','crm_p2_has_type']);
-    const tipo=entityType==='infrastruttura' ? inferInfrastructureType(row,rawTipo) : String(rawTipo||'').trim();
+    // Per le torri il tipo proviene dalla colonna C di export_torri (intestazione "tipo").
+    // Object.values(row)[2] è un fallback prudente nel caso l'intestazione venga alterata.
+    const columnC=entityType==='torre' ? (getField(row,['tipo']) || Object.values(row||{})[2] || '') : '';
+    const rawTipo=entityType==='infrastruttura'
+      ? getField(row,['tipo','tipologia','categoria','tipo_infrastruttura'])
+      : columnC;
+    const tipo=entityType==='infrastruttura' ? infrastructureTypeFromId(id) : String(rawTipo||'').trim();
+    const tipoTorreOriginale=entityType==='torre' ? String(rawTipo||'').trim() : '';
+    const tipoTorre=entityType==='torre' ? canonicalTowerType(tipoTorreOriginale) : '';
 
     return {
       ...row,
@@ -745,7 +790,10 @@ function normalizeGeographicRows(rows,entityType){
       nome,
       localita: row.localita || localita,
       periodo: row.periodo || periodo,
-      tipo: entityType==='infrastruttura' ? tipo : (row.tipo || tipo),
+      tipo: entityType==='infrastruttura' ? tipo : (tipoTorreOriginale || 'torre'),
+      tipoOriginale: entityType==='infrastruttura' ? String(rawTipo||'').trim() : '',
+      tipoTorre,
+      tipoTorreOriginale,
       lat: coordinates.lat,
       lon: coordinates.lon,
       coordinateValide: coordinates.valid,
@@ -762,7 +810,7 @@ function normalizeConnectionRows(rows){
     ...row,
     id_torre:String(getField(row,['id_torre','torre_id','source_torre','da_torre'])||'').trim(),
     id_infrastruttura:String(getField(row,['id_infrastruttura','infrastruttura_id','target','destinazione'])||'').trim(),
-    tipo_relazione:String(getField(row,['tipo_relazione','tipo_connessione','relazione'])||'').trim().toLowerCase(),
+    tipo_relazione:String(getField(row,['tipo_relazione','tipo_connessione','relazione','visibilita','visibilità','linea_di_vista','connessione_visiva'])||'').trim().toLowerCase(),
     certezza:String(getField(row,['certezza','livello_certezza'])||'').trim().toLowerCase(),
     distanza_km:parseCoordinate(getField(row,['distanza_km','distanza','distance_km'])),
     fonti:getField(row,['fonti','fonte','riferimento']),
@@ -796,15 +844,88 @@ function prepareData(){
   return stats;
 }
 
+const CSV_HEADER_NAMES = new Set([
+  'id','nome','tipo','localita','comune','lat','lon','periodo','note_ricerca','fonti','arco_id','url',
+  'id_torre','torre_id','id_infrastruttura','infrastruttura_id','tipo_relazione','tipo_connessione',
+  'certezza','distanza_km','note','titolo','data','autore','descrizione','citazione'
+]);
+
+function cleanCSVCell(value){
+  return String(value ?? '').replace(/^\uFEFF/,'').trim();
+}
+
+function csvHeaderScore(row){
+  if(!Array.isArray(row)) return 0;
+  const names=row.map(value=>normalizeKey(cleanCSVCell(value)));
+  return names.reduce((score,name)=>score+(CSV_HEADER_NAMES.has(name)?1:0),0);
+}
+
+function uniqueCSVHeaders(row){
+  const used=new Map();
+  return row.map((value,index)=>{
+    let header=cleanCSVCell(value) || `_col_${index+1}`;
+    const base=header;
+    const count=(used.get(base)||0)+1;
+    used.set(base,count);
+    if(count>1) header=`${base}_${count}`;
+    return header;
+  });
+}
+
+/*
+ * Parser matriciale robusto per gli export VSTACK di Google Sheets.
+ * Con headers=0 la riga esplicita {"id"\"nome"...} resta nei dati:
+ * la individuiamo e la promuoviamo a intestazione, senza perdere t-srd_001.
+ */
 const parseCSV = text => {
   const cleaned=String(text ?? '').replace(/^\uFEFF/,'').trim();
+  if(!cleaned) return [];
+
   const parsed=Papa.parse(cleaned,{
-    header:true,
-    skipEmptyLines:'greedy',
-    transformHeader:header=>String(header ?? '').replace(/^\uFEFF/,'').trim()
+    header:false,
+    skipEmptyLines:'greedy'
   });
-  if(parsed.errors && parsed.errors.length) console.warn('Avvisi lettura CSV:',parsed.errors);
-  return parsed.data.filter(row=>Object.values(row).some(value=>String(value ?? '').trim()!==''));
+  if(parsed.errors && parsed.errors.length){
+    console.warn('Avvisi lettura CSV:',parsed.errors.slice(0,20),
+      parsed.errors.length>20?`(+${parsed.errors.length-20} altri)`:''
+    );
+  }
+
+  const matrix=(parsed.data||[])
+    .map(row=>Array.isArray(row)?row.map(cleanCSVCell):[cleanCSVCell(row)])
+    .filter(row=>row.some(value=>value!==''));
+  if(!matrix.length) return [];
+
+  // Cerca la vera riga di intestazione nei primi record. È normalmente la
+  // prima riga del VSTACK, ma GViz può anteporre etichette A/B/C oppure Col1/Col2.
+  let headerIndex=-1;
+  let bestScore=-1;
+  const limit=Math.min(matrix.length,6);
+  for(let index=0;index<limit;index++){
+    const score=csvHeaderScore(matrix[index]);
+    if(score>bestScore){ bestScore=score; headerIndex=index; }
+  }
+
+  // Una vera intestazione deve contenere almeno due campi riconoscibili.
+  // Per file CSV standard questo corrisponde semplicemente alla prima riga.
+  if(bestScore<2){
+    headerIndex=0;
+    console.warn('Intestazione CSV non riconosciuta con certezza; uso la prima riga:',matrix[0]);
+  }
+
+  const headers=uniqueCSVHeaders(matrix[headerIndex]);
+  const rows=[];
+  for(const values of matrix.slice(headerIndex+1)){
+    if(!values.some(value=>value!=='')) continue;
+    const row={};
+    headers.forEach((header,index)=>{ row[header]=values[index] ?? ''; });
+    // Conserva eventuali campi eccedenti per la diagnosi, senza spostare le colonne note.
+    if(values.length>headers.length) row.__extra=values.slice(headers.length);
+    rows.push(row);
+  }
+
+  console.log(`CSV: intestazione alla riga ${headerIndex+1}; ${headers.length} colonne; ${rows.length} record`,headers);
+  return rows;
 };
 
 function setStatus(msg,type){
@@ -821,10 +942,13 @@ function dataSummary(prefix='✓'){
   };
 }
 function sheetsURL(sheet){
-  // Impone esplicitamente una sola riga di intestazione. Senza headers=1,
-  // GViz può interpretare molte righe iniziali come intestazioni e concatenarle.
-  const query = encodeURIComponent('select *');
-  return `https://docs.google.com/spreadsheets/d/${cfg.id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheet)}&headers=1&tq=${query}`;
+  /*
+   * headers=0 impedisce a GViz di "indovinare" decine di righe di intestazione.
+   * La riga esplicita prodotta da VSTACK viene poi riconosciuta da parseCSV().
+   * In questo modo il primo record reale (t-srd_001) non viene usato come header.
+   */
+  const query=encodeURIComponent('select *');
+  return `https://docs.google.com/spreadsheets/d/${cfg.id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheet)}&headers=0&tq=${query}`;
 }
 
 /* ── Google Sheets loader ── */
@@ -928,50 +1052,213 @@ async function loadFromFiles(){
 }
 
 /* ── icons ── */
-const makeTorreIcon=active=>{
-  const size=active?24:20;
-  const fill=active?'#7d1200':'#d12f18';
-  // Stile interamente inline: non dipende dal caricamento delle classi CSS nell'anteprima.
-  return L.divIcon({
-    html:`<div aria-label="Torre" style="width:${size}px;height:${size}px;border-radius:50%;background:${fill};border:3px solid #fff;box-shadow:0 0 0 2px #8b1a00,0 2px 8px rgba(0,0,0,.75);position:relative;"><span style="position:absolute;width:4px;height:4px;border-radius:50%;background:#fff;left:50%;top:50%;transform:translate(-50%,-50%);"></span></div>`,
-    className:'',iconSize:[size,size],iconAnchor:[size/2,size/2]
-  });
+const TOWER_TYPE_STYLES = {
+  torrezilla: {
+    label:'Torrezilla',
+    description:'Piccola torre di osservazione, circa 7 m',
+    color:'#d95a3a',
+    size:20
+  },
+  senzilla: {
+    label:'Senzilla',
+    description:'Torre media da difesa leggera, circa 10 m',
+    color:'#b43d24',
+    size:25
+  },
+  torre_de_armas: {
+    label:'De Armas',
+    description:'Torre de Armas: grande torre da difesa pesante, circa 17 m',
+    color:'#7d160d',
+    size:32
+  },
+  non_classificata: {
+    label:'Tipologia non classificata',
+    description:'Tipo assente o non riconosciuto nella colonna C',
+    color:'#6f6860',
+    size:22
+  }
 };
+
+/* Il valore viene letto esclusivamente dalla colonna C (tipo) di export_torri. */
+function canonicalTowerType(value){
+  const type=normalizeKey(value);
+  if(/torrezill/.test(type)) return 'torrezilla';
+  if(/senzill/.test(type)) return 'senzilla';
+  if(/de_armas|torre_de_armi|gagliard/.test(type)) return 'torre_de_armas';
+  return 'non_classificata';
+}
+
+function towerTypeLabel(torre){
+  const canonical=torre?.tipoTorre || canonicalTowerType(torre?.tipoTorreOriginale || torre?.tipo);
+  return (TOWER_TYPE_STYLES[canonical] || TOWER_TYPE_STYLES.non_classificata).label;
+}
+
+function towerTypeDescription(torre){
+  const canonical=torre?.tipoTorre || canonicalTowerType(torre?.tipoTorreOriginale || torre?.tipo);
+  return (TOWER_TYPE_STYLES[canonical] || TOWER_TYPE_STYLES.non_classificata).description;
+}
+
+function towerSymbolSvg(canonical,active=false,sizeOverride=null){
+  const style=TOWER_TYPE_STYLES[canonical] || TOWER_TYPE_STYLES.non_classificata;
+  const size=sizeOverride || (active ? style.size+5 : style.size);
+  const col=style.color;
+  const ring=active ? '#fff' : '#fff';
+  const outline=active ? '#32100b' : '#4c201a';
+  let symbol='';
+
+  if(canonical==='torrezilla'){
+    // Piccolo punto di osservazione: cerchio piccolo.
+    symbol=`<circle cx="18" cy="18" r="6.2" fill="${col}" stroke="${outline}" stroke-width="1.5"/>
+      <circle cx="18" cy="18" r="1.8" fill="#fff"/>`;
+  }else if(canonical==='senzilla'){
+    // Torre media: rombo, chiaramente distinto dal cerchio.
+    symbol=`<path d="M18 7.2 28.8 18 18 28.8 7.2 18Z" fill="${col}" stroke="${outline}" stroke-width="1.7"/>
+      <path d="M13.2 18h9.6M18 13.2v9.6" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/>`;
+  }else if(canonical==='torre_de_armas'){
+    // Torre maggiore: sagoma merlata, più grande e massiccia.
+    symbol=`<path d="M7.3 10.5h4.2V7.2h4.2v3.3h4.6V7.2h4.2v3.3h4.2v18.2H7.3Z" fill="${col}" stroke="${outline}" stroke-width="1.6" stroke-linejoin="round"/>
+      <path d="M13 28.7v-7.2c0-3 2.1-5.1 5-5.1s5 2.1 5 5.1v7.2" fill="#fff" opacity=".92"/>
+      <rect x="10.5" y="13" width="3.3" height="3.6" rx=".5" fill="#fff"/><rect x="22.2" y="13" width="3.3" height="3.6" rx=".5" fill="#fff"/>`;
+  }else{
+    symbol=`<circle cx="18" cy="18" r="8" fill="#fff" stroke="${col}" stroke-width="3" stroke-dasharray="3 2"/>
+      <path d="M14 14l8 8m0-8-8 8" stroke="${col}" stroke-width="2" stroke-linecap="round"/>`;
+  }
+
+  return `<div class="tower-symbol" style="width:${size}px;height:${size}px;filter:drop-shadow(0 2px 4px rgba(0,0,0,.7))">
+    <svg viewBox="0 0 36 36" width="${size}" height="${size}" aria-hidden="true" focusable="false">
+      <circle cx="18" cy="18" r="16" fill="${ring}" stroke="${active?'#fff':outline}" stroke-width="${active?2.8:1.8}"/>
+      ${symbol}
+    </svg>
+  </div>`;
+}
+
+function makeTowerIcon(torre,active=false){
+  const canonical=torre?.tipoTorre || canonicalTowerType(torre?.tipoTorreOriginale || torre?.tipo);
+  const style=TOWER_TYPE_STYLES[canonical] || TOWER_TYPE_STYLES.non_classificata;
+  const size=active ? style.size+5 : style.size;
+  return L.divIcon({
+    html:towerSymbolSvg(canonical,active,size),
+    className:'',
+    iconSize:[size,size],
+    iconAnchor:[size/2,size/2],
+    tooltipAnchor:[0,-size/2-4]
+  });
+}
+
+function setTowerMarkerActive(torre,active){
+  if(!torre?._mk || typeof torre._mk.setIcon!=='function') return;
+  torre._mk.setIcon(makeTowerIcon(torre,active));
+  if(active && typeof torre._mk.setZIndexOffset==='function') torre._mk.setZIndexOffset(2500);
+  else if(typeof torre._mk.setZIndexOffset==='function') torre._mk.setZIndexOffset(1200);
+}
+
+function renderTowerTypeLegend(){
+  const host=document.getElementById('tower-type-legend');
+  if(!host) return;
+  host.innerHTML='';
+  const present=[...new Set(torri.filter(t=>t.coordinateValide).map(t=>t.tipoTorre||'non_classificata'))];
+  const order=['torrezilla','senzilla','torre_de_armas','non_classificata'];
+  order.filter(key=>present.includes(key)).forEach(key=>{
+    const style=TOWER_TYPE_STYLES[key];
+    const row=document.createElement('div');
+    row.className='leg-row';
+    row.title=style.description;
+    row.innerHTML=`<span style="width:25px;height:25px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">${towerSymbolSvg(key,false,23)}</span> ${style.label}`;
+    host.appendChild(row);
+  });
+}
 
 const INFR_COLORS = {
   porto:'#1a6b9a', salina:'#2a8a5a', peschera:'#7a4f9e', tonnara:'#b8860b',
-  faro:'#d6a100', fortificazione:'#8b5e3c', centro_abitato:'#555', altro:'#888'
+  corallo:'#e76f51', faro:'#d6a100', fortificazione:'#8b5e3c', centro_abitato:'#555', altro:'#888'
 };
-function makeInfrIcon(tipo){
-  const canonical=canonicalInfrastructureType(tipo);
+
+function makeSvgInfrIcon(title,strokeColor,svgBody,size=30){
+  return L.divIcon({
+    html:`<div class="infr-marker" title="${title}" style="width:${size}px;height:${size}px;filter:drop-shadow(0 2px 4px rgba(0,0,0,.62))">
+      <svg viewBox="0 0 32 32" width="${size}" height="${size}" aria-hidden="true" focusable="false">
+        <circle cx="16" cy="16" r="14" fill="#fff" stroke="${strokeColor}" stroke-width="2.4"/>
+        ${svgBody}
+      </svg>
+    </div>`,
+    className:'',iconSize:[size,size],iconAnchor:[size/2,size/2],tooltipAnchor:[0,-size/2-4]
+  });
+}
+
+function makeInfrIcon(itemOrType){
+  const canonical=resolveInfrastructureType(itemOrType);
   const col=INFR_COLORS[canonical]||INFR_COLORS.altro;
+  const outerShadow='0 3px 8px rgba(0,0,0,.72)';
+  const darkOutline='1px solid rgba(28,26,22,.85)';
+
   if(canonical==='tonnara'){
-    return L.divIcon({
-      html:`<div title="Tonnara" style="width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:13px solid ${col};filter:drop-shadow(0 1px 2px rgba(0,0,0,.45))"></div>`,
-      className:'',iconSize:[14,13],iconAnchor:[7,13]
-    });
+    return makeSvgInfrIcon('Tonnara — tonno',col,`
+      <ellipse cx="17" cy="16" rx="9" ry="5.7" fill="${col}" stroke="#4d3500" stroke-width="1.2"/>
+      <path d="M8 16 3 11v10Z" fill="${col}" stroke="#4d3500" stroke-width="1.1"/>
+      <path d="M15 10.8 18 7l2.2 4.5M15 21.2 18 25l2.2-4.5" fill="${col}" stroke="#4d3500" stroke-width="1" stroke-linejoin="round"/>
+      <circle cx="22" cy="14.5" r="1.25" fill="#fff"/><circle cx="22" cy="14.5" r=".55" fill="#222"/>
+      <path d="M11.5 13.2c1.4 1.7 1.4 3.9 0 5.6" fill="none" stroke="#fff" stroke-width="1.25" stroke-linecap="round"/>
+    `,36);
   }
+
+  if(canonical==='corallo'){
+    return makeSvgInfrIcon('Corallo',col,`
+      <path d="M16 27V11m0 5-6-5m6 8 7-6m-7 9-5 3m5-12 4-5m-10 3V7m13 6V9" fill="none" stroke="${col}" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="10" cy="7" r="2" fill="${col}"/><circle cx="20" cy="8" r="2" fill="${col}"/><circle cx="23" cy="9" r="1.7" fill="${col}"/><circle cx="11" cy="25" r="1.7" fill="${col}"/>
+    `,36);
+  }
+
+  if(canonical==='salina'){
+    return makeSvgInfrIcon('Salina — cumulo di sale',col,`
+      <path d="M5 24Q10 19 13 15Q16 10 19 15Q22 19 27 24Z" fill="#f7fbff" stroke="${col}" stroke-width="2.4"/>
+      <path d="M7 24h18" stroke="${col}" stroke-width="2.4" stroke-linecap="round"/>
+      <circle cx="12" cy="20" r="1.15" fill="${col}"/><circle cx="16" cy="16" r="1.15" fill="${col}"/><circle cx="20" cy="20" r="1.15" fill="${col}"/>
+      <path d="M9 27h14" stroke="#7fb7d4" stroke-width="1.5" stroke-linecap="round"/>
+    `,36);
+  }
+
+  if(canonical==='porto'){
+    return makeSvgInfrIcon('Porto / scalo — ancora',col,`
+      <circle cx="16" cy="7" r="2.7" fill="none" stroke="${col}" stroke-width="2.4"/>
+      <path d="M16 10v13M11 13h10M7 19c1.5 5.4 4.8 8 9 8s7.5-2.6 9-8M7 19h5M25 19h-5" fill="none" stroke="${col}" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="m7 19 2.5-2.5M25 19l-2.5-2.5" fill="none" stroke="${col}" stroke-width="2" stroke-linecap="round"/>
+    `,36);
+  }
+
+  if(canonical==='peschera'){
+    return makeSvgInfrIcon('Peschiera',col,`
+      <path d="M5 21c3-2.5 5.5-2.5 8.5 0s5.5 2.5 8.5 0 5.5-2.5 8 0" fill="none" stroke="${col}" stroke-width="2" stroke-linecap="round"/>
+      <ellipse cx="16.5" cy="14" rx="6.5" ry="3.8" fill="${col}" stroke="#4b2d63" stroke-width="1.1"/>
+      <path d="M10.2 14 6.4 10.8v6.4Z" fill="${col}" stroke="#4b2d63" stroke-width="1"/>
+      <circle cx="20" cy="13" r=".8" fill="#fff"/>
+      <path d="M6 25c3-1.8 5.5-1.8 8.5 0s5.5 1.8 8.5 0 5.2-1.8 7.5 0" fill="none" stroke="#6ea8c7" stroke-width="1.6" stroke-linecap="round"/>
+    `,36);
+  }
+
   if(canonical==='faro'){
     return L.divIcon({
-      html:`<div title="Faro" style="width:12px;height:12px;background:${col};border:2px solid #fff;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,.45)"></div>`,
-      className:'',iconSize:[12,12],iconAnchor:[6,6]
+      html:`<div class="infr-marker" title="Faro" style="width:27px;height:27px;background:${col};border:3px solid #fff;outline:${darkOutline};border-radius:50%;box-shadow:${outerShadow};display:flex;align-items:center;justify-content:center"><div style="width:8px;height:8px;background:#fff;border-radius:50%"></div></div>`,
+      className:'',iconSize:[27,27],iconAnchor:[13.5,13.5],tooltipAnchor:[0,-19]
     });
   }
+
   if(canonical==='fortificazione' || canonical==='altro'){
     return L.divIcon({
-      html:`<div title="${canonical}" style="width:11px;height:11px;background:${col};border:2px solid #fff;transform:rotate(45deg);box-shadow:0 1px 4px rgba(0,0,0,.4)"></div>`,
-      className:'',iconSize:[13,13],iconAnchor:[6,6]
+      html:`<div class="infr-marker" title="${canonical==='altro'?'Tipologia non riconosciuta':canonical}" style="width:23px;height:23px;background:${col};border:3px solid #fff;outline:${darkOutline};transform:rotate(45deg);box-shadow:${outerShadow}"></div>`,
+      className:'',iconSize:[28,28],iconAnchor:[14,14],tooltipAnchor:[0,-19]
     });
   }
+
   if(canonical==='centro_abitato'){
     return L.divIcon({
-      html:`<div title="Centro abitato" style="width:11px;height:11px;background:${col};border:2px solid #fff;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,.4)"></div>`,
-      className:'',iconSize:[11,11],iconAnchor:[5,5]
+      html:`<div class="infr-marker" title="Centro abitato" style="width:25px;height:25px;background:${col};border:3px solid #fff;outline:${darkOutline};border-radius:50%;box-shadow:${outerShadow}"></div>`,
+      className:'',iconSize:[25,25],iconAnchor:[12.5,12.5],tooltipAnchor:[0,-18]
     });
   }
+
   return L.divIcon({
-    html:`<div title="${canonical}" style="width:11px;height:11px;background:${col};border:2px solid #fff;border-radius:2px;box-shadow:0 1px 4px rgba(0,0,0,.4)"></div>`,
-    className:'',iconSize:[11,11],iconAnchor:[5,5]
+    html:`<div class="infr-marker" title="${canonical}" style="width:24px;height:24px;background:${col};border:3px solid #fff;outline:${darkOutline};border-radius:5px;box-shadow:${outerShadow}"></div>`,
+    className:'',iconSize:[24,24],iconAnchor:[12,12],tooltipAnchor:[0,-17]
   });
 }
 
@@ -990,6 +1277,8 @@ function safeDomId(value){
 function render(){
   const stats=prepareData();
   layerTorri.clearLayers();layerInfr.clearLayers();layerLines.clearLayers();
+  torri.forEach(t=>{ t._mk=null; });
+  infrastrutture.forEach(i=>{ i._mk=null; });
   activeTorre=null;
   const list=document.getElementById('torre-list');
   list.innerHTML='';
@@ -1016,7 +1305,7 @@ function render(){
       el.className='torre-item';
       el.id=safeDomId(t.id||nome);
       const group=getTowerGroup(t);
-      const sub=[t.localita,t.periodo].filter(Boolean).join(' · ');
+      const sub=[towerTypeLabel(t),t.localita,t.periodo].filter(Boolean).join(' · ');
       const geoIssue=!t.coordinateValide ? 'coordinate non valide' : '';
       el.innerHTML=`<div class="ti-name"><span class="torre-dot"></span>${nome}</div><div class="ti-sub">${sub}${geoIssue?(sub?' · ':'')+geoIssue:''}</div>`;
       el.onclick=()=>selectTorre(t);
@@ -1025,25 +1314,43 @@ function render(){
       // La torre rimane nella lista anche se non possiede coordinate valide.
       if(!t.coordinateValide) return;
       bounds.push([t.lat,t.lon]);
-      const mk=L.marker([t.lat,t.lon],{
-        icon:makeTorreIcon(false),pane:'towerPane',zIndexOffset:10000,
-        riseOnHover:true,riseOffset:20000,keyboard:true
-      }).addTo(layerTorri);
-      mk.bindTooltip(`<strong>${nome}</strong><br><small>${t.localita||''} — ${t.periodo||''}</small><br><small>${t.lat.toFixed(5)}, ${t.lon.toFixed(5)}</small>`,{direction:'top',offset:[0,-8]});
-      if(mk.setZIndexOffset) mk.setZIndexOffset(10000);
-      mk.on('click',()=>selectTorre(t));
-      t._mk=mk;
-      renderedTorri++;
+      try {
+        const mk=L.marker([t.lat,t.lon],{
+          icon:makeTowerIcon(t,false),pane:'towerPane',zIndexOffset:1200
+        }).addTo(layerTorri);
+        mk.bindTooltip(`<strong>${nome}</strong><br><small>${towerTypeLabel(t)} — ${towerTypeDescription(t)}${t.localita?' — '+t.localita:''}${t.periodo?' — '+t.periodo:''}</small><br><small>${t.lat.toFixed(5)}, ${t.lon.toFixed(5)}</small>`,{direction:'top',offset:[0,-8]});
+        mk.on('mouseover',()=>{ if(typeof mk.setZIndexOffset==='function') mk.setZIndexOffset(2600); });
+        mk.on('mouseout',()=>{ if(t!==activeTorre && typeof mk.setZIndexOffset==='function') mk.setZIndexOffset(1200); });
+        mk.on('click',()=>selectTorre(t));
+        t._mk=mk;
+        renderedTorri++;
+      } catch(error) {
+        console.error('Impossibile disegnare la torre',t.id,t.nome,error);
+      }
     });
+  });
+
+  // Guardia di regressione: nessuna torre valida può restare senza marker.
+  torri.filter(t=>t.coordinateValide && !t._mk).forEach(t=>{
+    const mk=L.marker([t.lat,t.lon],{
+      icon:makeTowerIcon(t,false),pane:'towerPane',zIndexOffset:1200
+    }).addTo(layerTorri);
+    mk.bindTooltip(`<strong>${t.nome||t.id||'Torre'}</strong><br><small>${towerTypeLabel(t)} — ${towerTypeDescription(t)}</small>`,{direction:'top'});
+    mk.on('click',()=>selectTorre(t));
+    t._mk=mk;
+    renderedTorri++;
+    console.warn('Marker di riserva creato per',t.id,t.nome);
   });
 
   infrastrutture.forEach(i=>{
     if(!i.coordinateValide) return;
     bounds.push([i.lat,i.lon]);
-    const mk=L.marker([i.lat,i.lon],{icon:makeInfrIcon(i.tipo),pane:'infrastructurePane'}).addTo(layerInfr);
-    mk.bindTooltip(`<strong>${i.nome||'?'}</strong><br><small>${canonicalInfrastructureType(i.tipo)} — ${i.localita||''}</small>`,{direction:'top',offset:[0,-8]});
+    const mk=L.marker([i.lat,i.lon],{icon:makeInfrIcon(i),pane:'infrastructurePane'}).addTo(layerInfr);
+    mk.bindTooltip(`<strong>${i.nome||'?'}</strong><br><small>${infrastructureTypeLabel(i)} — ${i.localita||''}</small>`,{direction:'top',offset:[0,-8]});
     i._mk=mk;
   });
+
+  renderTowerTypeLegend();
 
   if(bounds.length) map.fitBounds(bounds,{padding:[30,30],maxZoom:11});
   else map.setView([39.5,9.0],7);
@@ -1051,107 +1358,179 @@ function render(){
   document.getElementById('legend').style.display=stats.torriValide||stats.infrValide?'block':'none';
   const srdRendered=groups.srd.filter(t=>t._mk).length;
   const typeCounts=infrastrutture.reduce((acc,item)=>{acc[item.tipo]=(acc[item.tipo]||0)+1;return acc;},{});
-  const typeSummary=['porto','salina','peschera','tonnara','faro','fortificazione','centro_abitato','altro']
+  const typeSummary=['porto','salina','peschera','tonnara','corallo','faro','fortificazione','centro_abitato','altro']
     .filter(k=>typeCounts[k]).map(k=>`${k} ${typeCounts[k]}`).join(' · ');
   document.getElementById('list-head').textContent=`Torri · ${torri.length} · visualizzate ${renderedTorri} · Sardegna ${srdRendered}/${groups.srd.length}`;
-  console.info('Tipi infrastruttura:',typeSummary);
+  console.info('Tipi infrastruttura da prefisso ID:',typeSummary);
+  console.table(infrastrutture.slice(0,20).map(i=>({id:i.id,nome:i.nome,tipo_da_id:i.tipo})));
+  console.info('Tipi torre dalla colonna C:',torri.reduce((acc,t)=>{acc[t.tipoTorre]=(acc[t.tipoTorre]||0)+1;return acc;},{}));
   console.table(groups.srd.slice(0,20).map(t=>({
     id:t.id,nome:t.nome,lat_raw:t.coordinateRawLat,lon_raw:t.coordinateRawLon,
     lat:t.lat,lon:t.lon,valide:t.coordinateValide,renderizzata:!!t._mk,fonte:t.coordinateFonte
   })));
+  const bari=torri.find(t=>normalizeIdentifier(t.id)==='t-srd-001');
+  console.info('Controllo Torre di Barì:',bari?{id:bari.id,nome:bari.nome,lat:bari.lat,lon:bari.lon,valida:bari.coordinateValide,marker:!!bari._mk}:'record non ricevuto');
   return {...stats,renderedTorri,srdRendered};
 }
 
-function getSpatialContext(torre,maxDistanceKm=30){
+function getNearestTowers(torre,limit=3){
   if(!torre || !torre.coordinateValide) return [];
-  return infrastrutture
-    .filter(i=>i.coordinateValide)
-    .map(i=>({infrastruttura:i,distanzaKm:hav(torre.lat,torre.lon,i.lat,i.lon)}))
-    .filter(item=>item.distanzaKm<=maxDistanceKm)
-    .sort((a,b)=>a.distanzaKm-b.distanzaKm);
+  const sourceKey=normalizeIdentifier(torre.id||torre.nome);
+  return torri
+    .filter(t=>t.coordinateValide && normalizeIdentifier(t.id||t.nome)!==sourceKey)
+    .map(t=>({torre:t,distanzaKm:hav(torre.lat,torre.lon,t.lat,t.lon)}))
+    .sort((a,b)=>a.distanzaKm-b.distanzaKm)
+    .slice(0,limit);
+}
+
+function isVisibleConnection(connection){
+  const relationship=normalizeSearchText(connection?.tipo_relazione||'');
+  if(/visiv|visible|linea[ _-]*di[ _-]*vista|line[ _-]*of[ _-]*sight|sight/.test(relationship)) return true;
+  const explicit=normalizeSearchText(getField(connection||{},[
+    'visibile','visibilita','visibilità','linea_di_vista','connessione_visiva','visible'
+  ]));
+  return /^(si|sì|yes|true|1|x)$/.test(explicit) || /visiv|visible|vista|sight/.test(explicit);
+}
+
+function getVisibleInfrastructureConnections(torre){
+  if(!torre || !torre.coordinateValide) return [];
+  const towerKey=normalizeIdentifier(torre.id||torre.nome);
+  const result=[];
+  const seen=new Set();
+
+  connessioni
+    .filter(c=>normalizeIdentifier(c.id_torre)===towerKey && isVisibleConnection(c))
+    .forEach(c=>{
+      const targetKey=normalizeIdentifier(c.id_infrastruttura);
+      const infrastructure=infrastrutture.find(i=>
+        normalizeIdentifier(i.id)===targetKey || normalizeIdentifier(i.nome)===targetKey
+      );
+      if(!infrastructure || !infrastructure.coordinateValide) return;
+      const uniqueKey=normalizeIdentifier(infrastructure.id||infrastructure.nome);
+      if(seen.has(uniqueKey)) return;
+      seen.add(uniqueKey);
+      result.push({
+        infrastruttura:infrastructure,
+        connessione:c,
+        distanzaKm:hav(torre.lat,torre.lon,infrastructure.lat,infrastructure.lon)
+      });
+    });
+
+  return result.sort((a,b)=>a.distanzaKm-b.distanzaKm);
+}
+
+const CONNECTION_STYLES={
+  tower:{
+    base:{color:'#1769aa',weight:3,opacity:.72,dashArray:null},
+    hover:{color:'#004f9e',weight:6,opacity:1,dashArray:null}
+  },
+  infrastructure:{
+    base:{color:'#d4821a',weight:3,opacity:.72,dashArray:'9,6'},
+    hover:{color:'#c94a2a',weight:6,opacity:1,dashArray:'9,5'}
+  }
+};
+
+function addInteractiveDistanceLine({source,target,kind,label,distanceKm}){
+  const styles=CONNECTION_STYLES[kind];
+  const line=L.polyline(
+    [[source.lat,source.lon],[target.lat,target.lon]],
+    {pane:'connectionPane',interactive:true,...styles.base}
+  ).addTo(layerLines);
+
+  line.bindTooltip(
+    `<strong>${label}</strong><br><span>↔ ${distanceKm.toFixed(2)} km</span>`,
+    {sticky:true,direction:'top',opacity:.97,className:'distance-tooltip'}
+  );
+  line.on('mouseover',function(){
+    this.setStyle(styles.hover);
+    if(this.bringToFront) this.bringToFront();
+  });
+  line.on('mouseout',function(){ this.setStyle(styles.base); });
+  return line;
 }
 
 /* ── select torre ── */
 function selectTorre(torre){
   if(activeTorre){
-    const p=torri.find(t=>normalizeIdentifier(t.id)===normalizeIdentifier(activeTorre.id));
-    if(p&&p._mk){ p._mk.setIcon(makeTorreIcon(false)); if(p._mk.setZIndexOffset)p._mk.setZIndexOffset(10000); }
+    const previous=torri.find(t=>normalizeIdentifier(t.id)===normalizeIdentifier(activeTorre.id));
+    if(previous&&previous._mk) setTowerMarkerActive(previous,false);
     document.querySelectorAll('.torre-item').forEach(e=>e.classList.remove('active'));
   }
+
   activeTorre=torre;
-  if(torre._mk){ torre._mk.setIcon(makeTorreIcon(true)); if(torre._mk.setZIndexOffset)torre._mk.setZIndexOffset(20000); }
+  if(torre._mk) setTowerMarkerActive(torre,true);
   const li=document.getElementById(safeDomId(torre.id||torre.nome));
   if(li){li.classList.add('active');li.scrollIntoView({block:'nearest'});}
 
-  layerLines.clearLayers();layerInfr.clearLayers();
+  layerLines.clearLayers();
+  layerInfr.clearLayers();
   infrastrutture.forEach(i=>{
     if(!i.coordinateValide) return;
-    const mk=L.marker([i.lat,i.lon],{icon:makeInfrIcon(i.tipo),opacity:0.18,pane:'infrastructurePane'}).addTo(layerInfr);
-    mk.bindTooltip(`<strong>${i.nome||'?'}</strong><br><small>${canonicalInfrastructureType(i.tipo)} — ${i.localita||''}</small>`,{direction:'top',offset:[0,-8]});
-    i._mk=mk;
+    const marker=L.marker([i.lat,i.lon],{
+      icon:makeInfrIcon(i),opacity:.42,pane:'infrastructurePane'
+    }).addTo(layerInfr);
+    marker.bindTooltip(
+      `<strong>${i.nome||'?'}</strong><br><small>${infrastructureTypeLabel(i)} — ${i.localita||''}</small>`,
+      {direction:'top',offset:[0,-8]}
+    );
+    i._mk=marker;
   });
 
-  const tKey=normalizeIdentifier(torre.id||torre.nome);
-  const conns=connessioni.filter(c=>normalizeIdentifier(c.id_torre)===tKey);
-  const linked=new Set();
+  const nearestTowers=getNearestTowers(torre,3);
+  nearestTowers.forEach(item=>{
+    addInteractiveDistanceLine({
+      source:torre,
+      target:item.torre,
+      kind:'tower',
+      label:`Torre vicina: ${item.torre.nome||item.torre.id||'?'}`,
+      distanceKm:item.distanzaKm
+    });
+  });
+
+  const visibleInfrastructure=getVisibleInfrastructureConnections(torre);
+  visibleInfrastructure.forEach(item=>{
+    addInteractiveDistanceLine({
+      source:torre,
+      target:item.infrastruttura,
+      kind:'infrastructure',
+      label:`Infrastruttura visibile: ${item.infrastruttura.nome||item.infrastruttura.id||'?'}`,
+      distanceKm:item.distanzaKm
+    });
+    if(item.infrastruttura._mk) item.infrastruttura._mk.setOpacity(1);
+  });
+
+  showDetail(torre,nearestTowers,visibleInfrastructure);
 
   if(torre.coordinateValide){
-    conns.forEach(c=>{
-      const targetKey=normalizeIdentifier(c.id_infrastruttura);
-      const tgt=infrastrutture.find(i=>normalizeIdentifier(i.id)===targetKey || normalizeIdentifier(i.nome)===targetKey)
-             ||torri.find(t=>normalizeIdentifier(t.id)===targetKey || normalizeIdentifier(t.nome)===targetKey);
-      if(!tgt || !tgt.coordinateValide) return;
-      linked.add(normalizeIdentifier(tgt.id||tgt.nome));
-      const dashed=c.tipo_relazione==='visiva'||c.certezza==='media'||c.certezza==='bassa';
-      L.polyline([[torre.lat,torre.lon],[tgt.lat,tgt.lon]],{
-        pane:'connectionPane',
-        color:c.tipo_relazione==='visiva+funzionale'?'#c94a2a':'#d4821a',
-        weight:c.certezza==='alta'?2.5:1.5,
-        opacity:c.certezza==='alta'?0.85:c.certezza==='media'?0.55:0.3,
-        dashArray:dashed?'6,4':null
-      }).addTo(layerLines);
-      const dist=hav(torre.lat,torre.lon,tgt.lat,tgt.lon).toFixed(2);
-      L.tooltip({permanent:true,direction:'center'})
-        .setContent(`<span style="font-size:9px;background:white;padding:1px 4px;border-radius:2px;color:#444;white-space:nowrap;box-shadow:0 1px 2px rgba(0,0,0,.1)">↔ ${dist} km</span>`)
-        .setLatLng([(torre.lat+tgt.lat)/2,(torre.lon+tgt.lon)/2]).addTo(layerLines);
-      if(tgt._mk)tgt._mk.setOpacity(1);
-    });
+    const connectedCoordinates=[
+      [torre.lat,torre.lon],
+      ...nearestTowers.map(item=>[item.torre.lat,item.torre.lon]),
+      ...visibleInfrastructure.map(item=>[item.infrastruttura.lat,item.infrastruttura.lon])
+    ];
+    if(connectedCoordinates.length>1){
+      map.fitBounds(connectedCoordinates,{padding:[55,55],maxZoom:12,animate:true});
+    }else{
+      map.setView([torre.lat,torre.lon],12,{animate:true});
+    }
   }
-
-  const spatial=getSpatialContext(torre,30).filter(item=>
-    !linked.has(normalizeIdentifier(item.infrastruttura.id||item.infrastruttura.nome))
-  );
-  spatial.forEach(item=>{
-    const i=item.infrastruttura;
-    L.polyline([[torre.lat,torre.lon],[i.lat,i.lon]],{
-      pane:'connectionPane',
-      color:'#777',weight:1,opacity:0.32,dashArray:'2,6'
-    }).addTo(layerLines);
-    if(i._mk)i._mk.setOpacity(0.62);
-  });
-
-  layerInfr.eachLayer(layer=>{
-    const i=infrastrutture.find(x=>x._mk===layer);
-    if(i&&linked.has(normalizeIdentifier(i.id||i.nome))) layer.setOpacity(1);
-  });
-
-  showDetail(torre,conns,spatial);
-  if(torre.coordinateValide) map.setView([torre.lat,torre.lon],12,{animate:true});
 }
 
 /* ── detail panel ── */
-function showDetail(torre,conns,spatial=[]){
+function showDetail(torre,nearestTowers=[],visibleInfrastructure=[]){
   const panel=document.getElementById('detail-panel');
   panel.classList.add('visible');
 
-  // tab connessioni
   const nome=torre.nome||'?';
   const titleEl=document.getElementById('detail-title');
   titleEl.innerHTML='';
   const titleText=document.createElement('span');
   titleText.textContent=nome+(torre.note_ricerca?' — '+torre.note_ricerca:'');
   titleEl.appendChild(titleText);
-  // scheda ASMSa button
+  const towerTypeBadge=document.createElement('span');
+  towerTypeBadge.textContent=towerTypeLabel(torre);
+  towerTypeBadge.style.cssText='display:inline-block;margin-left:6px;padding:1px 6px;border-radius:10px;background:#f0e4d4;color:#6d4428;font-size:9px;font-weight:600;vertical-align:middle;';
+  titleEl.appendChild(towerTypeBadge);
+
   const asmsa=torre['scheda_ASMSa']||torre.scheda_ASMSa||'';
   const existingBtn=document.getElementById('asmsa-btn');
   if(existingBtn) existingBtn.remove();
@@ -1163,44 +1542,50 @@ function showDetail(torre,conns,spatial=[]){
     btn.style.cssText='display:block;margin-top:5px;font-size:10px;color:#1a6b9a;background:#eef6ff;border:1px solid #bdd5ee;border-radius:3px;padding:3px 8px;text-decoration:none;width:fit-content;';
     titleEl.appendChild(btn);
   }
+
   const cd=document.getElementById('detail-connections');
   cd.innerHTML='';
-  if(!conns.length){
-    cd.innerHTML='<div style="font-size:10px;color:#aaa;padding:4px 0">Nessuna connessione registrata.</div>';
-  } else {
-    conns.forEach(c=>{
-      const tgt=infrastrutture.find(i=>i.id===c.id_infrastruttura||i.nome===c.id_infrastruttura)
-             ||torri.find(t=>t.id===c.id_infrastruttura||t.nome===c.id_infrastruttura);
-      const tipo=tgt?(tgt.tipo||'torre'):'?';
-      const tn=tgt?(tgt.nome||'?'):c.id_infrastruttura;
-      let distStr='—';
-      if(torre.coordinateValide&&tgt&&tgt.coordinateValide){
-        const dc=hav(torre.lat,torre.lon,tgt.lat,tgt.lon);
-        distStr=dc.toFixed(2)+' km';
-        if(Number.isFinite(c.distanza_km)&&Math.abs(dc-c.distanza_km)>0.15)
-          distStr+=` <span style="color:#ccc;font-size:9px">(CSV:${c.distanza_km})</span>`;
-      }
-      const d=document.createElement('div');d.className='conn-item';
-      d.innerHTML=`<span class="conn-badge badge-${tipo}">${tipo}</span>
-        <div class="conn-detail"><strong>${tn}</strong> · ↔ ${distStr} · <span class="cert-${c.certezza||'bassa'}">${c.certezza||''}</span> · ${c.tipo_relazione||''}
-        ${c.fonti?`<br><em style="color:#bbb">${c.fonti}</em>`:''}${c.note?`<br>${c.note}`:''}</div>`;
-      cd.appendChild(d);
+
+  const nearestHeading=document.createElement('div');
+  nearestHeading.style.cssText='font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#1769aa;margin:3px 0;';
+  nearestHeading.textContent='Tre torri più vicine';
+  cd.appendChild(nearestHeading);
+
+  if(!nearestTowers.length){
+    cd.insertAdjacentHTML('beforeend','<div style="font-size:10px;color:#aaa;padding:4px 0">Nessun’altra torre con coordinate valide.</div>');
+  }else{
+    nearestTowers.forEach((item,index)=>{
+      const target=item.torre;
+      const row=document.createElement('div');
+      row.className='conn-item';
+      row.innerHTML=`<span class="conn-badge badge-torre">${index+1}ª torre</span>
+        <div class="conn-detail"><strong>${target.nome||target.id||'?'}</strong> · ${towerTypeLabel(target)} · ↔ ${item.distanzaKm.toFixed(2)} km
+        ${target.localita?`<br>${target.localita}`:''}</div>`;
+      cd.appendChild(row);
     });
   }
 
-  if(spatial.length){
-    const heading=document.createElement('div');
-    heading.style.cssText='font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#777;margin:8px 0 3px;';
-    heading.textContent='Contesto spaziale calcolato entro 30 km';
-    cd.appendChild(heading);
-    spatial.forEach(item=>{
-      const i=item.infrastruttura;
-      const d=document.createElement('div');
-      d.className='conn-item';
-      d.innerHTML=`<span class="conn-badge badge-${i.tipo||'torre'}">${i.tipo||'infrastruttura'}</span>
-        <div class="conn-detail"><strong>${i.nome||i.id||'?'}</strong> · ↔ ${item.distanzaKm.toFixed(2)} km<br>
-        <span style="color:#777">Prossimità calcolata, non connessione storica documentata</span></div>`;
-      cd.appendChild(d);
+  const visibleHeading=document.createElement('div');
+  visibleHeading.style.cssText='font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#d4821a;margin:8px 0 3px;';
+  visibleHeading.textContent='Infrastrutture con connessione visiva';
+  cd.appendChild(visibleHeading);
+
+  if(!visibleInfrastructure.length){
+    cd.insertAdjacentHTML('beforeend','<div style="font-size:10px;color:#aaa;padding:4px 0">Nessuna infrastruttura con relazione “visiva” registrata in connessioni.csv.</div>');
+  }else{
+    visibleInfrastructure.forEach(item=>{
+      const infrastructure=item.infrastruttura;
+      const connection=item.connessione;
+      const type=resolveInfrastructureType(infrastructure);
+      const row=document.createElement('div');
+      row.className='conn-item';
+      row.innerHTML=`<span class="conn-badge badge-${type}">${type}</span>
+        <div class="conn-detail"><strong>${infrastructure.nome||infrastructure.id||'?'}</strong> · ↔ ${item.distanzaKm.toFixed(2)} km
+        ${connection.certezza?` · <span class="cert-${connection.certezza}">${connection.certezza}</span>`:''}
+        ${connection.tipo_relazione?` · ${connection.tipo_relazione}`:''}
+        ${connection.fonti?`<br><em style="color:#bbb">${connection.fonti}</em>`:''}
+        ${connection.note?`<br>${connection.note}`:''}</div>`;
+      cd.appendChild(row);
     });
   }
 
