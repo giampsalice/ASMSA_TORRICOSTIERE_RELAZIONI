@@ -476,11 +476,11 @@ function render(){
   // group torri by prefix
   const groups = {srd:[], cat:[], crs:[], other:[]};
   torri.forEach(t=>{
-    const id=t.id||'';
-    if(id.startsWith('TS'))      groups.srd.push(t);
-    else if(id.startsWith('TC')&&!id.startsWith('TCR')) groups.cat.push(t);
-    else if(id.startsWith('TCR')) groups.crs.push(t);
-    else                          groups.other.push(t);
+    const id=(t.id||'').toLowerCase();
+    if(id.startsWith('t-srd'))      groups.srd.push(t);
+    else if(id.startsWith('t-cat')) groups.cat.push(t);
+    else if(id.startsWith('t-crs')) groups.crs.push(t);
+    else                            groups.other.push(t);
   });
 
   const groupLabels={srd:'Sardegna',cat:'Corona d\'Aragona',crs:'Corsica',other:'Altre'};
