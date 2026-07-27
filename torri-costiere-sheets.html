@@ -243,6 +243,7 @@
       <div class="leg-sep"></div>
       <div class="leg-row"><div style="width:16px;height:2px;background:#c94a2a;flex-shrink:0"></div> Visiva+funz.</div>
       <div class="leg-row"><div style="width:16px;height:0;border-top:2px dashed #d4821a;flex-shrink:0"></div> Visiva</div>
+      <div class="leg-row"><div style="width:16px;height:0;border-top:2px dotted #777;flex-shrink:0"></div> Prossimità calcolata</div>
     </div>
   </div>
 </div>
@@ -325,8 +326,142 @@ function switchDetailTab(n) {
   document.getElementById('dpane-fonti').classList.toggle('visible', n==='fonti');
 }
 
-/* ── utilities ── */
-const parseCSV = t => Papa.parse(t.trim(),{header:true,skipEmptyLines:true}).data;
+/* ── utilities e normalizzazione dati ── */
+function normalizeKey(value){
+  return String(value ?? '')
+    .replace(/^\uFEFF/, '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+function normalizeIdentifier(value){
+  return String(value ?? '').replace(/^\uFEFF/, '').trim().toLowerCase();
+}
+
+function getField(row, aliases){
+  if(!row) return '';
+  const byKey={};
+  Object.entries(row).forEach(([key,value])=>{ byKey[normalizeKey(key)]=value; });
+  for(const alias of aliases){
+    const value=byKey[normalizeKey(alias)];
+    if(value!==undefined && value!==null && String(value).trim()!=='') return value;
+  }
+  return '';
+}
+
+function parseCoordinate(value){
+  if(value===undefined || value===null || String(value).trim()==='') return NaN;
+  let text=String(value).trim().replace(/[\s\u00A0]/g,'');
+  if(text.includes(',') && text.includes('.')){
+    if(text.lastIndexOf(',')>text.lastIndexOf('.')) text=text.replace(/\./g,'').replace(',','.');
+    else text=text.replace(/,/g,'');
+  } else {
+    text=text.replace(',','.');
+  }
+  return Number(text);
+}
+
+function getCoordinates(row){
+  let lat=parseCoordinate(getField(row,[
+    'lat','geo:lat','geo_lat','latitude','latitudine','coord_lat','y'
+  ]));
+  let lon=parseCoordinate(getField(row,[
+    'lon','lng','long','geo:long','geo_long','longitude','longitudine','coord_lon','coord_lng','x'
+  ]));
+
+  // Corregge soltanto l'inversione evidente tipica dell'area mediterranea.
+  if(Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat)<=20 && Math.abs(lon)>=30 && Math.abs(lon)<=50){
+    [lat,lon]=[lon,lat];
+  }
+
+  const valid=Number.isFinite(lat) && Number.isFinite(lon) &&
+    lat>=-90 && lat<=90 && lon>=-180 && lon<=180;
+  return {lat,lon,valid};
+}
+
+function canonicalInfrastructureType(value){
+  const tipo=normalizeKey(value);
+  if(tipo.includes('tonnara')) return 'tonnara';
+  if(tipo.includes('pesch')) return 'peschera';
+  if(tipo.includes('salin')) return 'salina';
+  if(tipo.includes('porto') || tipo.includes('approdo') || tipo.includes('scala')) return 'porto';
+  return tipo || 'altro';
+}
+
+function normalizeGeographicRows(rows,entityType){
+  return (rows||[]).map((row,index)=>{
+    const coordinates=getCoordinates(row);
+    const id=String(getField(row,[
+      'id','@id','dcterms:identifier','codice',
+      `${entityType}_id`,`id_${entityType}`
+    ]) || `${entityType}-${index+1}`).trim();
+    const nome=String(getField(row,[
+      'nome','denominazione','dcterms:title','titolo',
+      `nome_${entityType}`,entityType
+    ]) || id).trim();
+    const localita=String(getField(row,['localita','località','luogo','comune','oc:location']) || '').trim();
+    const periodo=String(getField(row,['periodo','datazione','epoca','cronologia']) || '').trim();
+    const rawTipo=getField(row,['tipo','tipologia','categoria','tipo_infrastruttura']);
+    const tipo=entityType==='infrastruttura' ? canonicalInfrastructureType(rawTipo) : String(rawTipo||'').trim();
+
+    return {
+      ...row,
+      id,
+      nome,
+      localita: row.localita || localita,
+      periodo: row.periodo || periodo,
+      tipo: row.tipo ? (entityType==='infrastruttura' ? canonicalInfrastructureType(row.tipo) : row.tipo) : tipo,
+      lat: coordinates.lat,
+      lon: coordinates.lon,
+      coordinateValide: coordinates.valid
+    };
+  });
+}
+
+function normalizeConnectionRows(rows){
+  return (rows||[]).map(row=>({
+    ...row,
+    id_torre:String(getField(row,['id_torre','torre_id','source_torre','da_torre'])||'').trim(),
+    id_infrastruttura:String(getField(row,['id_infrastruttura','infrastruttura_id','target','destinazione'])||'').trim(),
+    tipo_relazione:String(getField(row,['tipo_relazione','tipo_connessione','relazione'])||'').trim().toLowerCase(),
+    certezza:String(getField(row,['certezza','livello_certezza'])||'').trim().toLowerCase(),
+    distanza_km:parseCoordinate(getField(row,['distanza_km','distanza','distance_km'])),
+    fonti:getField(row,['fonti','fonte','riferimento']),
+    note:getField(row,['note','descrizione'])
+  }));
+}
+
+function prepareData(){
+  torri=normalizeGeographicRows(torri,'torre');
+  infrastrutture=normalizeGeographicRows(infrastrutture,'infrastruttura');
+  connessioni=normalizeConnectionRows(connessioni);
+  fonti=normalizeGeographicRows(fonti,'fonte');
+  const stats={
+    torriValide:torri.filter(t=>t.coordinateValide).length,
+    infrValide:infrastrutture.filter(i=>i.coordinateValide).length
+  };
+  console.log(`Coordinate valide: ${stats.torriValide}/${torri.length} torri; ${stats.infrValide}/${infrastrutture.length} infrastrutture`);
+  const invalidTorri=torri.filter(t=>!t.coordinateValide);
+  const invalidInfr=infrastrutture.filter(i=>!i.coordinateValide);
+  if(invalidTorri.length) console.warn('Torri senza coordinate valide:',invalidTorri.map(t=>({id:t.id,nome:t.nome,lat:t.lat,lon:t.lon})));
+  if(invalidInfr.length) console.warn('Infrastrutture senza coordinate valide:',invalidInfr.map(i=>({id:i.id,nome:i.nome,lat:i.lat,lon:i.lon})));
+  return stats;
+}
+
+const parseCSV = text => {
+  const cleaned=String(text ?? '').replace(/^\uFEFF/,'').trim();
+  const parsed=Papa.parse(cleaned,{
+    header:true,
+    skipEmptyLines:'greedy',
+    transformHeader:header=>String(header ?? '').replace(/^\uFEFF/,'').trim()
+  });
+  if(parsed.errors && parsed.errors.length) console.warn('Avvisi lettura CSV:',parsed.errors);
+  return parsed.data.filter(row=>Object.values(row).some(value=>String(value ?? '').trim()!==''));
+};
+
 function setStatus(msg,type){
   const el=document.getElementById('status');
   el.textContent=msg; el.className=type||'';
@@ -355,10 +490,10 @@ async function loadFromSheets(){
       fonti = f ? parseCSV(f) : [];
     } catch(_){ fonti=[]; }
 
-    render();
+    const stats=render();
     const now=new Date().toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});
     document.getElementById('topbar-sub').textContent=`Google Sheets · ${torri.length} torri · aggiornato ${now}`;
-    setStatus(`✓ ${torri.length} torri · ${infrastrutture.length} infr. · ${connessioni.length} conn.${fonti.length?` · ${fonti.length} fonti`:''}`, 'ok');
+    setStatus(`✓ ${torri.length} torri (${stats.torriValide} in mappa) · ${infrastrutture.length} infr. (${stats.infrValide} in mappa) · ${connessioni.length} conn.${fonti.length?` · ${fonti.length} fonti`:''}`, 'ok');
   } catch(e){ setStatus('Errore: '+e.message,'error'); }
 }
 
@@ -406,8 +541,8 @@ async function loadFromZenodo(){
     if(!fT||!fI||!fC){setStatus('CSV non trovati nel record','error');return;}
     const [t,i,c]=await Promise.all([fetch(fT.links.self).then(r=>r.text()),fetch(fI.links.self).then(r=>r.text()),fetch(fC.links.self).then(r=>r.text())]);
     torri=parseCSV(t);infrastrutture=parseCSV(i);connessioni=parseCSV(c);fonti=[];
-    render();
-    setStatus(`✓ ${torri.length} torri · ${infrastrutture.length} infr. · ${connessioni.length} conn.`,'ok');
+    const stats=render();
+    setStatus(`✓ ${torri.length} torri (${stats.torriValide} in mappa) · ${infrastrutture.length} infr. (${stats.infrValide} in mappa) · ${connessioni.length} conn.`,'ok');
   }catch(e){setStatus('Errore: '+e.message,'error');}
 }
 function copyCitation(){
@@ -431,8 +566,8 @@ async function loadFromFiles(){
   ]);
   if(!t||!i||!c){setStatus('Seleziona almeno i 3 CSV principali','error');return;}
   torri=parseCSV(t);infrastrutture=parseCSV(i);connessioni=parseCSV(c);fonti=f?parseCSV(f):[];
-  render();
-  setStatus(`✓ ${torri.length} torri · ${infrastrutture.length} infr. · ${connessioni.length} conn.`,'ok');
+  const stats=render();
+  setStatus(`✓ ${torri.length} torri (${stats.torriValide} in mappa) · ${infrastrutture.length} infr. (${stats.infrValide} in mappa) · ${connessioni.length} conn.${fonti.length?` · ${fonti.length} fonti`:''}`,'ok');
 }
 
 /* ── icons ── */
@@ -466,121 +601,148 @@ function hav(la1,lo1,la2,lo2){
 }
 
 /* ── render all markers ── */
+function safeDomId(value){
+  return 'li-'+String(value ?? '').replace(/[^a-zA-Z0-9_-]+/g,'_');
+}
+
 function render(){
+  const stats=prepareData();
   layerTorri.clearLayers();layerInfr.clearLayers();layerLines.clearLayers();
   activeTorre=null;
   const list=document.getElementById('torre-list');
   list.innerHTML='';
   const bounds=[];
 
-  // group torri by prefix
-  const groups = {srd:[], cat:[], crs:[], other:[]};
+  // Raggruppamento per prefisso, senza dipendere dalle maiuscole.
+  const groups={srd:[],cat:[],crs:[],other:[]};
   torri.forEach(t=>{
-    const id=(t.id||'').toLowerCase();
-    if(id.startsWith('t-srd'))      groups.srd.push(t);
+    const id=normalizeIdentifier(t.id);
+    if(id.startsWith('t-srd')) groups.srd.push(t);
     else if(id.startsWith('t-cat')) groups.cat.push(t);
     else if(id.startsWith('t-crs')) groups.crs.push(t);
-    else                            groups.other.push(t);
+    else groups.other.push(t);
   });
 
   const groupLabels={srd:'Sardegna',cat:'Corona d\'Aragona',crs:'Corsica',other:'Altre'};
   Object.entries(groups).forEach(([gk,gtorri])=>{
-    if(!gtorri.length)return;
+    if(!gtorri.length) return;
     const gl=document.createElement('div');
     gl.className='group-label';
     gl.textContent=groupLabels[gk];
     list.appendChild(gl);
 
     gtorri.forEach(t=>{
-      if(!t.lat||!t.lon)return;
-      const la=parseFloat(t.lat),lo=parseFloat(t.lon);
-      if(isNaN(la)||isNaN(lo))return;
-      bounds.push([la,lo]);
-      const mk=L.marker([la,lo],{icon:makeTorreIcon(false)}).addTo(layerTorri);
-      const nome=t.nome||'?';
-      mk.bindTooltip(`<strong>${nome}</strong><br><small>${t.localita||''} — ${t.periodo||''}</small>`,{direction:'top',offset:[0,-8]});
-      mk.on('click',()=>selectTorre(t));
+      const nome=t.nome||t.id||'?';
       const el=document.createElement('div');
-      el.className='torre-item';el.id='li-'+(t.id||nome).replace(/\s/g,'_');
-      el.innerHTML=`<div class="ti-name"><span class="torre-dot"></span>${nome}</div><div class="ti-sub">${t.localita||''} · ${t.periodo||''}</div>`;
+      el.className='torre-item';
+      el.id=safeDomId(t.id||nome);
+      const sub=[t.localita,t.periodo].filter(Boolean).join(' · ');
+      el.innerHTML=`<div class="ti-name"><span class="torre-dot"></span>${nome}</div><div class="ti-sub">${sub}${!t.coordinateValide?(sub?' · ':'')+'coordinate non valide':''}</div>`;
       el.onclick=()=>selectTorre(t);
       list.appendChild(el);
+
+      // La torre rimane nella lista anche se non possiede coordinate valide.
+      if(!t.coordinateValide) return;
+      bounds.push([t.lat,t.lon]);
+      const mk=L.marker([t.lat,t.lon],{icon:makeTorreIcon(false)}).addTo(layerTorri);
+      mk.bindTooltip(`<strong>${nome}</strong><br><small>${t.localita||''} — ${t.periodo||''}</small>`,{direction:'top',offset:[0,-8]});
+      mk.on('click',()=>selectTorre(t));
       t._mk=mk;
     });
   });
 
   infrastrutture.forEach(i=>{
-    if(!i.lat||!i.lon)return;
-    const la=parseFloat(i.lat),lo=parseFloat(i.lon);
-    if(isNaN(la)||isNaN(lo))return;
-    bounds.push([la,lo]);
-    const mk=L.marker([la,lo],{icon:makeInfrIcon(i.tipo)}).addTo(layerInfr);
+    if(!i.coordinateValide) return;
+    bounds.push([i.lat,i.lon]);
+    const mk=L.marker([i.lat,i.lon],{icon:makeInfrIcon(i.tipo)}).addTo(layerInfr);
     mk.bindTooltip(`<strong>${i.nome||'?'}</strong><br><small>${i.tipo||''} — ${i.localita||''}</small>`,{direction:'top',offset:[0,-8]});
     i._mk=mk;
   });
 
-  if(bounds.length) map.fitBounds(bounds,{padding:[30,30]});
-  document.getElementById('legend').style.display='block';
+  if(bounds.length) map.fitBounds(bounds,{padding:[30,30],maxZoom:11});
+  else map.setView([39.5,9.0],7);
+  map.invalidateSize();
+  document.getElementById('legend').style.display=stats.torriValide||stats.infrValide?'block':'none';
+  return stats;
+}
+
+function getSpatialContext(torre,maxDistanceKm=30){
+  if(!torre || !torre.coordinateValide) return [];
+  return infrastrutture
+    .filter(i=>i.coordinateValide)
+    .map(i=>({infrastruttura:i,distanzaKm:hav(torre.lat,torre.lon,i.lat,i.lon)}))
+    .filter(item=>item.distanzaKm<=maxDistanceKm)
+    .sort((a,b)=>a.distanzaKm-b.distanzaKm);
 }
 
 /* ── select torre ── */
 function selectTorre(torre){
   if(activeTorre){
-    const p=torri.find(t=>t.id===activeTorre.id);
+    const p=torri.find(t=>normalizeIdentifier(t.id)===normalizeIdentifier(activeTorre.id));
     if(p&&p._mk)p._mk.setIcon(makeTorreIcon(false));
     document.querySelectorAll('.torre-item').forEach(e=>e.classList.remove('active'));
   }
   activeTorre=torre;
   if(torre._mk)torre._mk.setIcon(makeTorreIcon(true));
-  const liId='li-'+(torre.id||(torre.nome||'').replace(/\s/g,'_'));
-  const li=document.getElementById(liId);
+  const li=document.getElementById(safeDomId(torre.id||torre.nome));
   if(li){li.classList.add('active');li.scrollIntoView({block:'nearest'});}
 
   layerLines.clearLayers();layerInfr.clearLayers();
-
   infrastrutture.forEach(i=>{
-    if(!i.lat||!i.lon)return;
-    const mk=L.marker([parseFloat(i.lat),parseFloat(i.lon)],{icon:makeInfrIcon(i.tipo),opacity:0.18}).addTo(layerInfr);
+    if(!i.coordinateValide) return;
+    const mk=L.marker([i.lat,i.lon],{icon:makeInfrIcon(i.tipo),opacity:0.18}).addTo(layerInfr);
     mk.bindTooltip(`<strong>${i.nome||'?'}</strong><br><small>${i.tipo||''} — ${i.localita||''}</small>`,{direction:'top',offset:[0,-8]});
     i._mk=mk;
   });
 
-  const tKey=torre.id||torre.nome||'';
-  const conns=connessioni.filter(c=>c.id_torre===tKey);
+  const tKey=normalizeIdentifier(torre.id||torre.nome);
+  const conns=connessioni.filter(c=>normalizeIdentifier(c.id_torre)===tKey);
   const linked=new Set();
 
-  conns.forEach(c=>{
-    const tgt=infrastrutture.find(i=>i.id===c.id_infrastruttura||i.nome===c.id_infrastruttura)
-           ||torri.find(t=>t.id===c.id_infrastruttura||t.nome===c.id_infrastruttura);
-    if(!tgt||!tgt.lat)return;
-    linked.add(c.id_infrastruttura);
-    const la1=parseFloat(torre.lat),lo1=parseFloat(torre.lon);
-    const la2=parseFloat(tgt.lat), lo2=parseFloat(tgt.lon);
-    const dashed=c.tipo_relazione==='visiva'||c.certezza==='media'||c.certezza==='bassa';
-    L.polyline([[la1,lo1],[la2,lo2]],{
-      color:c.tipo_relazione==='visiva+funzionale'?'#c94a2a':'#d4821a',
-      weight:c.certezza==='alta'?2.5:1.5,
-      opacity:c.certezza==='alta'?0.85:c.certezza==='media'?0.55:0.3,
-      dashArray:dashed?'6,4':null
+  if(torre.coordinateValide){
+    conns.forEach(c=>{
+      const targetKey=normalizeIdentifier(c.id_infrastruttura);
+      const tgt=infrastrutture.find(i=>normalizeIdentifier(i.id)===targetKey || normalizeIdentifier(i.nome)===targetKey)
+             ||torri.find(t=>normalizeIdentifier(t.id)===targetKey || normalizeIdentifier(t.nome)===targetKey);
+      if(!tgt || !tgt.coordinateValide) return;
+      linked.add(normalizeIdentifier(tgt.id||tgt.nome));
+      const dashed=c.tipo_relazione==='visiva'||c.certezza==='media'||c.certezza==='bassa';
+      L.polyline([[torre.lat,torre.lon],[tgt.lat,tgt.lon]],{
+        color:c.tipo_relazione==='visiva+funzionale'?'#c94a2a':'#d4821a',
+        weight:c.certezza==='alta'?2.5:1.5,
+        opacity:c.certezza==='alta'?0.85:c.certezza==='media'?0.55:0.3,
+        dashArray:dashed?'6,4':null
+      }).addTo(layerLines);
+      const dist=hav(torre.lat,torre.lon,tgt.lat,tgt.lon).toFixed(2);
+      L.tooltip({permanent:true,direction:'center'})
+        .setContent(`<span style="font-size:9px;background:white;padding:1px 4px;border-radius:2px;color:#444;white-space:nowrap;box-shadow:0 1px 2px rgba(0,0,0,.1)">↔ ${dist} km</span>`)
+        .setLatLng([(torre.lat+tgt.lat)/2,(torre.lon+tgt.lon)/2]).addTo(layerLines);
+      if(tgt._mk)tgt._mk.setOpacity(1);
+    });
+  }
+
+  const spatial=getSpatialContext(torre,30).filter(item=>
+    !linked.has(normalizeIdentifier(item.infrastruttura.id||item.infrastruttura.nome))
+  );
+  spatial.forEach(item=>{
+    const i=item.infrastruttura;
+    L.polyline([[torre.lat,torre.lon],[i.lat,i.lon]],{
+      color:'#777',weight:1,opacity:0.32,dashArray:'2,6'
     }).addTo(layerLines);
-    const dist=hav(la1,lo1,la2,lo2).toFixed(2);
-    L.tooltip({permanent:true,direction:'center'})
-      .setContent(`<span style="font-size:9px;background:white;padding:1px 4px;border-radius:2px;color:#444;white-space:nowrap;box-shadow:0 1px 2px rgba(0,0,0,.1)">↔ ${dist} km</span>`)
-      .setLatLng([(la1+la2)/2,(lo1+lo2)/2]).addTo(layerLines);
-    if(tgt._mk)tgt._mk.setOpacity(1);
+    if(i._mk)i._mk.setOpacity(0.62);
   });
 
-  layerInfr.eachLayer(l=>{
-    const i=infrastrutture.find(x=>x._mk===l);
-    if(i&&linked.has(i.id||i.nome))l.setOpacity(1);
+  layerInfr.eachLayer(layer=>{
+    const i=infrastrutture.find(x=>x._mk===layer);
+    if(i&&linked.has(normalizeIdentifier(i.id||i.nome))) layer.setOpacity(1);
   });
 
-  showDetail(torre,conns);
-  map.setView([parseFloat(torre.lat),parseFloat(torre.lon)],12,{animate:true});
+  showDetail(torre,conns,spatial);
+  if(torre.coordinateValide) map.setView([torre.lat,torre.lon],12,{animate:true});
 }
 
 /* ── detail panel ── */
-function showDetail(torre,conns){
+function showDetail(torre,conns,spatial=[]){
   const panel=document.getElementById('detail-panel');
   panel.classList.add('visible');
 
@@ -614,16 +776,32 @@ function showDetail(torre,conns){
       const tipo=tgt?(tgt.tipo||'torre'):'?';
       const tn=tgt?(tgt.nome||'?'):c.id_infrastruttura;
       let distStr='—';
-      if(tgt&&tgt.lat&&tgt.lon){
-        const dc=hav(parseFloat(torre.lat),parseFloat(torre.lon),parseFloat(tgt.lat),parseFloat(tgt.lon));
+      if(torre.coordinateValide&&tgt&&tgt.coordinateValide){
+        const dc=hav(torre.lat,torre.lon,tgt.lat,tgt.lon);
         distStr=dc.toFixed(2)+' km';
-        if(c.distanza_km&&Math.abs(dc-parseFloat(c.distanza_km))>0.15)
+        if(Number.isFinite(c.distanza_km)&&Math.abs(dc-c.distanza_km)>0.15)
           distStr+=` <span style="color:#ccc;font-size:9px">(CSV:${c.distanza_km})</span>`;
       }
       const d=document.createElement('div');d.className='conn-item';
       d.innerHTML=`<span class="conn-badge badge-${tipo}">${tipo}</span>
         <div class="conn-detail"><strong>${tn}</strong> · ↔ ${distStr} · <span class="cert-${c.certezza||'bassa'}">${c.certezza||''}</span> · ${c.tipo_relazione||''}
         ${c.fonti?`<br><em style="color:#bbb">${c.fonti}</em>`:''}${c.note?`<br>${c.note}`:''}</div>`;
+      cd.appendChild(d);
+    });
+  }
+
+  if(spatial.length){
+    const heading=document.createElement('div');
+    heading.style.cssText='font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#777;margin:8px 0 3px;';
+    heading.textContent='Contesto spaziale calcolato entro 30 km';
+    cd.appendChild(heading);
+    spatial.forEach(item=>{
+      const i=item.infrastruttura;
+      const d=document.createElement('div');
+      d.className='conn-item';
+      d.innerHTML=`<span class="conn-badge badge-${i.tipo||'torre'}">${i.tipo||'infrastruttura'}</span>
+        <div class="conn-detail"><strong>${i.nome||i.id||'?'}</strong> · ↔ ${item.distanzaKm.toFixed(2)} km<br>
+        <span style="color:#777">Prossimità calcolata, non connessione storica documentata</span></div>`;
       cd.appendChild(d);
     });
   }
